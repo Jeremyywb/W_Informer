@@ -40,18 +40,14 @@ class Informer(nn.Module):
         d_ff=512,
         activation='gelu',
         distil=True,
-        num_class=num_class,
-
-        label_len, out_len, 
-                 d_model=512,  n_e_l=3, d_layers=2,  
-                dropout=0.0, attn='prob', embed='fixed', freq='h',  
-                  mix=True,
-                device=torch.device('cuda:0')):
+        num_class=3,
+        n_e_l=3,
+        attn='prob',
+        mix=True,
+        device=torch.device('cuda:0')):
         super(Informer, self).__init__()
-        self.pred_len = out_len
         self.attn = attn
         self.output_attention = output_attention
-
 
         # Encoding
         self.enc_embedding = CollectEmbedding(
