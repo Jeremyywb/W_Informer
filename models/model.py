@@ -26,19 +26,20 @@ class Informer(nn.Module):
         Attn = ProbAttention if attn=='prob' else FullAttention
         # Encoder
         self.encoder = Encoder(
-            [EncoderLayer(
-                    AttentionLayer(
-                        Attn(False, factor, 
-                            attention_dropout=dropout,
-                            output_attention=output_attention), 
-                        d_model, 
-                        n_heads, 
-                        mix=False ),
-                    d_model,d_ff,
-                    dropout=dropout,
-                    activation=activation ) for o in range(e_layers)  ],
-            [ConvLayer(d_model) for l in range(e_layers-1) ] if distil else None,
-            norm_layer=torch.nn.LayerNorm(d_model) )
+                [EncoderLayer(
+                        AttentionLayer(
+                            Attn(False, factor, 
+                                attention_dropout=dropout,
+                                output_attention=output_attention), 
+                            d_model, 
+                            n_heads, 
+                            mix=False ),
+                        d_model,d_ff,
+                        dropout=dropout,
+                        activation=activation ) for o in range(e_layers)  ],
+                [ConvLayer(d_model) for l in range(e_layers-1) ] if distil else None,
+                norm_layer=torch.nn.LayerNorm(d_model) 
+                )
         # Decoder
         self.decoder = Decoder(
             [
@@ -62,7 +63,7 @@ class Informer(nn.Module):
         
     def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, 
                 enc_self_mask=None, dec_self_mask=None, dec_enc_mask=None):
-        enc_out = self.enc_embedding(x_enc, x_mark_enc)
+        enc_out = self.enc_embedding(x_enc, x_mark_enc)#seq_len->seq_len/2?
         enc_out, attns = self.encoder(enc_out, attn_mask=enc_self_mask)
 
         dec_out = self.dec_embedding(x_dec, x_mark_dec)
@@ -88,7 +89,7 @@ class InformerStack(nn.Module):
         self.attn = attn
         self.output_attention = output_attention
 
-        # Encoding
+        # Encoding  enc_in = input dim of targets
         self.enc_embedding = DataEmbedding(enc_in, d_model, embed, freq, dropout)
         self.dec_embedding = DataEmbedding(dec_in, d_model, embed, freq, dropout)
         # Attention
@@ -97,24 +98,32 @@ class InformerStack(nn.Module):
 
         inp_lens = list(range(len(e_layers))) # [0,1,2,...] you can customize here
         encoders = [
-            Encoder(
-                [
-                    EncoderLayer(
-                        AttentionLayer(Attn(False, factor, attention_dropout=dropout, output_attention=output_attention), 
-                                    d_model, n_heads, mix=False),
-                        d_model,
-                        d_ff,
-                        dropout=dropout,
-                        activation=activation
-                    ) for l in range(el)
-                ],
-                [
-                    ConvLayer(
-                        d_model
-                    ) for l in range(el-1)
-                ] if distil else None,
-                norm_layer=torch.nn.LayerNorm(d_model)
-            ) for el in e_layers]
+            Encoder( 
+                      [
+                        EncoderLayer(
+                            AttentionLayer(
+                                Attn( False, 
+                                      factor, 
+                                      attention_dropout=dropout, 
+                                      output_attention=output_attention), 
+                                d_model, 
+                                n_heads, 
+                                mix=False),#AttentionLayer
+                            d_model,
+                            d_ff,
+                            dropout=dropout,
+                            activation=activation ) for l in range(el)
+                      ],#Encoder[EncoderLayers]
+                        # eg 3,2,1 3层encoder 3 conv 3-1
+                        # last use encoder[-1]
+                        
+                      [
+                         ConvLayer(d_model) for l in range(el-1) 
+                      ] if distil else None,#ConvLayers
+                    norm_layer=torch.nn.LayerNorm(d_model)
+              )  for el in e_layers
+            ]
+
         self.encoder = EncoderStack(encoders, inp_lens)
         # Decoder
         self.decoder = Decoder(

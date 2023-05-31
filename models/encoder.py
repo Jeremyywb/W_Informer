@@ -14,6 +14,9 @@ class ConvLayer(nn.Module):
         self.norm = nn.BatchNorm1d(c_in)
         self.activation = nn.ELU()
         self.maxPool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
+        # dilation ->default 1
+        # (L_in+2*padding-dilation*(kernel_size-1)-1)/2+1
+        # (L_in+2*1-1*(3-1)-1 )/2+1=(L_in-1)/2+1
 
     def forward(self, x):
         x = self.downConv(x.permute(0, 2, 1))
@@ -29,7 +32,9 @@ class EncoderLayer(nn.Module):
         d_ff = d_ff or 4*d_model
         self.attention = attention
         self.conv1 = nn.Conv1d(in_channels=d_model, out_channels=d_ff, kernel_size=1)
+        # seq_len->seq_len
         self.conv2 = nn.Conv1d(in_channels=d_ff, out_channels=d_model, kernel_size=1)
+        # seq_len->seq_len
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
@@ -54,9 +59,9 @@ class EncoderLayer(nn.Module):
         return self.norm2(x+y), attn
 
 class Encoder(nn.Module):
-    def __init__(self, attn_layers, conv_layers=None, norm_layer=None):
+    def __init__(self, encoder_layers, conv_layers=None, norm_layer=None):
         super(Encoder, self).__init__()
-        self.attn_layers = nn.ModuleList(attn_layers)
+        self._encoder_layers = nn.ModuleList(encoder_layers)
         self.conv_layers = nn.ModuleList(conv_layers) if conv_layers is not None else None
         self.norm = norm_layer
 
@@ -64,15 +69,15 @@ class Encoder(nn.Module):
         # x [B, L, D]
         attns = []
         if self.conv_layers is not None:
-            for attn_layer, conv_layer in zip(self.attn_layers, self.conv_layers):
-                x, attn = attn_layer(x, attn_mask=attn_mask)
+            for enc_layer, conv_layer in zip(self._encoder_layers, self.conv_layers):
+                x, attn = enc_layer(x, attn_mask=attn_mask)
                 x = conv_layer(x)
                 attns.append(attn)
-            x, attn = self.attn_layers[-1](x, attn_mask=attn_mask)
+            x, attn = self._encoder_layers[-1](x, attn_mask=attn_mask)
             attns.append(attn)
         else:
-            for attn_layer in self.attn_layers:
-                x, attn = attn_layer(x, attn_mask=attn_mask)
+            for enc_layer in self._encoder_layers:
+                x, attn = enc_layer(x, attn_mask=attn_mask)
                 attns.append(attn)
 
         if self.norm is not None:
@@ -91,8 +96,11 @@ class EncoderStack(nn.Module):
         x_stack = []; attns = []
         for i_len, encoder in zip(self.inp_lens, self.encoders):
             inp_len = x.shape[1]//(2**i_len)
+            # inp_len = (x.shape[1]-1)//(2**i_len)
+            # input from original from couputed length -input_len
             x_s, attn = encoder(x[:, -inp_len:, :])
             x_stack.append(x_s); attns.append(attn)
         x_stack = torch.cat(x_stack, -2)
+        # concatnate all outputs
         
         return x_stack, attns
