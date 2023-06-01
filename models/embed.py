@@ -125,9 +125,9 @@ class DataEmbedding(nn.Module):
 class CatesEmbedding(nn.Module):
     def __init__(
         self, 
-        list_vocab_sizes = list_vocab_sizes,
-        list_embed_dims  = list_embed_dims,
-        tot_cat_emb_dim  = tot_cat_emb_dim,
+        list_vocab_sizes ,
+        list_embed_dims  ,
+        tot_cat_emb_dim  ,
         ):
 
         super(CatesEmbedding, self).__init__()
