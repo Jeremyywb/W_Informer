@@ -1,16 +1,17 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import numpy as np
 from utils.masking import TriangularCausalMask, ProbMask
 from models.encoder import Encoder, EncoderLayer, ConvLayer, EncoderStack
 from models.attn import FullAttention, ProbAttention, AttentionLayer
 from models.embed import CollectEmbedding
 
 class Informer(nn.Module):
-        """Colect embedings before put into ecoder.
+    """Colect embedings before put into ecoder.
 
     Args:
+        token_dim(int)  : input numric feature dim
         n_e_l           : num of encoder_layers
         token_emb_dim(int)  : output dim of numeric timeseries
         list_vocab_sizes    : input  vocab size list of each category timeseries
@@ -29,7 +30,8 @@ class Informer(nn.Module):
         self,
         token_dim, 
         token_emb_dim, 
-        list_vocab_sizes, 
+        list_vocab_sizes,
+        list_embed_dims,
         tot_cat_emb_dim, 
         input_seq_len,
         final_emb_dim=512,
@@ -46,14 +48,13 @@ class Informer(nn.Module):
         mix=True,
         device=torch.device('cuda:0')):
         super(Informer, self).__init__()
-        self.attn = attn
-        self.output_attention = output_attention
 
         # Encoding
-        self.enc_embedding = CollectEmbedding(
+        self._enc_embedding = CollectEmbedding(
                         token_dim,
                         token_emb_dim,
                         list_vocab_sizes,
+                        list_embed_dims,
                         tot_cat_emb_dim, 
                         final_emb_dim, 
                         dropout)#(bs,seq,final_emb_dim)
@@ -105,10 +106,10 @@ class Informer(nn.Module):
     def forward(
         self, 
         x, 
-        x_mark_enc, 
+        x_cat, 
         enc_self_mask=None, 
         ):
-        x = self.enc_embedding(x)
+        x = self._enc_embedding([x,x_cat])
         x, attns = self._encoder(x, attn_mask=enc_self_mask)
         x = self.mlps(x)
         x = F.sigmoid(x)

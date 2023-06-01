@@ -125,30 +125,32 @@ class DataEmbedding(nn.Module):
 class CatesEmbedding(nn.Module):
     def __init__(
         self, 
-        list_vocab_sizes = list_vocab_sizes, 
+        list_vocab_sizes = list_vocab_sizes,
+        list_embed_dims  = list_embed_dims,
         tot_cat_emb_dim  = tot_cat_emb_dim,
         ):
 
         super(CatesEmbedding, self).__init__()
-        assert tot_cat_emb_dim % len(list_vocab_sizes) == 0
-        each_cat_out_dim = int( tot_cat_emb_dim/len(list_vocab_sizes) )
         self._cat_emb_list = nn.ModuleList(
-          [nn.Embedding( vocab_sizes, each_cat_out_dim ) for vocab_sizes in list_vocab_sizes]
+          [nn.Embedding( vocab_sizes, embed_dim ) 
+                for vocab_sizes,embed_dim in zip(list_vocab_sizes,list_embed_dims)
+                ]
             )
-        self.emb_enc = nn.Sequential(
-            nn.Linear(tot_cat_emb_dim, tot_cat_emb_dim*2 ),
+        combin_dims = sum(list_embed_dims)
+        self._emb_enc = nn.Sequential(
+            nn.Linear(combin_dims, combin_dims*2 ),
             nn.ReLU(),
-            nn.Linear(tot_cat_emb_dim*2, tot_cat_emb_dim),
+            nn.Linear(combin_dims*2, tot_cat_emb_dim),
             nn.ReLU(),
         )
         
-    def forward(self, x):
+    def forward(self, x_cat):
         embeddings = []
         for i,emb_layer in enumerate(self._cat_emb_list):
-            o = emb_layer( x[:,:,i] )
+            o = emb_layer( x_cat[:,:,i] )
             embeddings.append( o )
         embeddings = torch.cat(embeddings, -1 )
-        embeddings = self.emb_enc(embeddings)
+        embeddings = self._emb_enc(embeddings)
         return embeddings
 
 
@@ -175,6 +177,7 @@ class CollectEmbedding(nn.Module):
         token_dim,
         token_emb_dim,
         list_vocab_sizes,
+        list_embed_dims,
         tot_cat_emb_dim, 
         final_emb_dim, 
         dropout=0.1
@@ -185,16 +188,17 @@ class CollectEmbedding(nn.Module):
         self._pos_emb = PositionalEmbedding(d_model= final_emb_dim)#max_len?
         self._emb_list = nn.ModuleList( [ 
             TokenEmbedding(c_in=token_dim, d_model=token_emb_dim),
-            CatesEmbedding(list_vocab_sizes = list_vocab_sizes, 
+            CatesEmbedding(list_vocab_sizes = list_vocab_sizes,
+                           list_embed_dims = list_embed_dims,
                            tot_cat_emb_dim  = tot_cat_emb_dim,
                                        # args... 
                                        ) ] )
         
         self._emb_dim_proj = nn.Sequential(
-                    nn.Linear( all_embed_dim,all_embed_dim*2 ),
+                    nn.Linear( all_embed_dim,all_embed_dim ),
                     nn.ReLU(),
                     nn.Dropout(p=dropout),
-                    nn.Linear( all_embed_dim*2,final_emb_dim )
+                    nn.Linear( all_embed_dim,final_emb_dim ),
                     nn.ReLU(),
                     nn.Dropout(p=dropout)
             )
@@ -208,18 +212,17 @@ class CollectEmbedding(nn.Module):
         for subsequent multiple parallel attention.
 
         Args:
-            x(dict[str:torch.Tensor]): dict of input tensors.
+            x(list[torch.Tensor]): [x,x_cat].
         Returns:
             d(list): list for input data type from x(dict).
             p(torch.Tensor): position embedding.
             e(list[torch.Tensor]): [numric_embeddings,category_embddings].
             o(torch.Tensor): embedings output reciver->linear project of e + position embedding .
         """
-        d = ['num_list','cat_list' ]
-        p = self._pos_emb(x['num_list'])
+        p = self._pos_emb(x[0] )
         e = []
-        for typ,emb_layer in zip(d,self._emb_list):
-            e_i = emb_layer( x[typ] ) #(bs,seq,dim)
+        for n in range(2):
+            e_i = self._emb_list[n]( x[n] ) #(bs,seq,dim)
             e.append( e_i )
         o = torch.cat(e, -1 )
         o = self._emb_dim_proj( o )
