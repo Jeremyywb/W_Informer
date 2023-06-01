@@ -182,7 +182,7 @@ class CollectEmbedding(nn.Module):
         final_emb_dim, 
         dropout=0.1
         ):
-        super(DataEmbedding, self).__init__()
+        super(CollectEmbedding, self).__init__()
 
         all_embed_dim = tot_cat_emb_dim + token_emb_dim
         self._pos_emb = PositionalEmbedding(d_model= final_emb_dim)#max_len?
