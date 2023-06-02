@@ -126,7 +126,7 @@ class Informer(nn.Module):
         f = lambda x:int((x-1)/2+1)
         for i in range( num_pool):
             Lin = f(Lin)
-            return Lin
+        return Lin
         
     def forward(
         self, 
