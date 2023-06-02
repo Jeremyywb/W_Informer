@@ -50,6 +50,7 @@ class Informer(nn.Module):
         super(Informer, self).__init__()
 
         # Encoding
+
         self._enc_embedding = CollectEmbedding(
                         token_dim,
                         token_emb_dim,
@@ -60,22 +61,46 @@ class Informer(nn.Module):
                         dropout)#(bs,seq,final_emb_dim)
         # Attention
         Attn = ProbAttention if attn=='prob' else FullAttention
-        # Encoder
+        att_ = {
+         "mask_flag":False, 
+         "factor":factor, 
+         "attention_dropout":dropout, 
+         "output_attention":False
+        }
+        attl_ ={
+            "d_model":final_emb_dim, 
+            "n_heads":n_heads, 
+            "mix":mix
+        }
+        ecl_ = {
+        'd_model':final_emb_dim, 
+        'd_ff':d_ff, 
+        'dropout':dropout,
+        'activation':activation
+        }
         self._encoder = Encoder(
-                [EncoderLayer(
-                        AttentionLayer(
-                            Attn(False, factor, 
-                                attention_dropout=dropout,
-                                output_attention=output_attention), 
-                            final_emb_dim, 
-                            n_heads, 
-                            mix=False ),
-                        final_emb_dim,d_ff,
-                        dropout=dropout,
-                        activation=activation ) for o in range(n_e_l)  ],
-                [ConvLayer(final_emb_dim) for l in range(n_e_l-1) ] if distil else None,
-                norm_layer=torch.nn.LayerNorm(final_emb_dim) 
-                )
+                [EncoderLayer( AttentionLayer(Attn(**att_),**attl_),**ecl_)
+                 for o in range(n_e_l)  ],
+                [ConvLayer(final_emb_dim) 
+                 for l in range(n_e_l-1) ] if distil else None,
+                 norm_layer=torch.nn.LayerNorm(final_emb_dim) 
+                 )
+        # Encoder
+        # self._encoder = Encoder(
+        #         [EncoderLayer(
+        #                 AttentionLayer(
+        #                     Attn(False, factor, 
+        #                         attention_dropout=dropout,
+        #                         output_attention=output_attention), 
+        #                     final_emb_dim, 
+        #                     n_heads, 
+        #                     mix=False ),
+        #                 final_emb_dim,d_ff,
+        #                 dropout=dropout,
+        #                 activation=activation ) for o in range(n_e_l)  ],
+        #         [ConvLayer(final_emb_dim) for l in range(n_e_l-1) ] if distil else None,
+        #         norm_layer=torch.nn.LayerNorm(final_emb_dim) 
+        #         )
         
 
         # self.end_conv1 = nn.Conv1d(in_channels=label_len+out_len, out_channels=out_len, kernel_size=1, bias=True)
@@ -112,7 +137,7 @@ class Informer(nn.Module):
         x = self._enc_embedding([x,x_cat])
         x, attns = self._encoder(x, attn_mask=enc_self_mask)
         x = self.mlps(x)
-        x = F.sigmoid(x)
+        # x = F.sigmoid(x)
         return x
 
 
@@ -191,3 +216,4 @@ class InformerStack(nn.Module):
             return dec_out[:,-self.pred_len:,:], attns
         else:
             return dec_out[:,-self.pred_len:,:] # [B, L, D]
+
