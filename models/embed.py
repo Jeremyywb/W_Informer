@@ -132,7 +132,7 @@ class CatesEmbedding(nn.Module):
 
         super(CatesEmbedding, self).__init__()
         self._cat_emb_list = nn.ModuleList(
-          [nn.Embedding( vocab_sizes, embed_dim ) 
+          [nn.Embedding( vocab_sizes, embed_dim ,padding_idx=0) 
                 for vocab_sizes,embed_dim in zip(list_vocab_sizes,list_embed_dims)
                 ]
             )
@@ -148,9 +148,16 @@ class CatesEmbedding(nn.Module):
         embeddings = []
         for i,emb_layer in enumerate(self._cat_emb_list):
             o = emb_layer( x_cat[:,:,i] )
+            print(o.shape)
             embeddings.append( o )
-        embeddings = torch.cat(embeddings, -1 )
+        embeddings = torch.cat(embeddings,axis=2 )
+        # embeddings = torch.stack(embeddings, dim=2 )
+        
+        print('*********before cat embs *********')
+        print(embeddings.shape)
         embeddings = self._emb_enc(embeddings)
+        print('*********after cat embs *********')
+        print(embeddings.shape)
         return embeddings
 
 
@@ -221,10 +228,15 @@ class CollectEmbedding(nn.Module):
         """
         p = self._pos_emb(x[0] )
         e = []
+        embstype = ['num','cat']
         for n in range(2):
             e_i = self._emb_list[n]( x[n] ) #(bs,seq,dim)
+            print(f'*********emb.shape {embstype[n]} *********')
             e.append( e_i )
-        o = torch.cat(e, -1 )
+            print(e_i.shape)
+        o = torch.cat(e, axis=2 )
+        print('*********concat.shape*********')
+        print(o.shape)
         o = self._emb_dim_proj( o )
         o = o + p
 
