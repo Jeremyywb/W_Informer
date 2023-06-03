@@ -49,11 +49,11 @@ class torchModel(object):
 
     
 
-    if early_stopping is not None:
-      self.early_stopping = early_stopping
-      assert early_stopping.early_stopping_metric in eval_metrics
-      idx = eval_metrics.index(early_stopping.early_stopping_metric)
-      self.early_stopping_metric = self.metrics[idx]
+    # if early_stopping is not None:
+    #   self.early_stopping = early_stopping
+    #   assert early_stopping.early_stopping_metric in eval_metrics
+    #   idx = eval_metrics.index(early_stopping.early_stopping_metric)
+    #   self.early_stopping_metric = self.metrics[idx]
 
 
   def fit(
