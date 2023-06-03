@@ -105,11 +105,14 @@ class torchModel(object):
 
       self._on_epoch_end(epoch,epoch_logs)
       if self._early_stopping._early_stop:
-        self._save_checkpoint( 
-            self._early_stopping._best_model, 
+        self._history._save_checkpoint( 
+            self._early_stopping._best_model,
+            self._early_stopping._best_score_at,
+            self._early_stopping.val_loss_min,
             self._CheckpointPath,
-            'OneFOldBest') 
+            'OneFOldBest'
 
+            ) 
 
   def _on_epoch_begin(self,epoch):
     self._history.on_epoch_begin(epoch)
@@ -162,9 +165,11 @@ class torchModel(object):
     raise NotImplementedError()
   def predict(self,batch):
     raise NotImplementedError()
-  def _save_checkpoint(self, State, path,prefix):
-    saveName = f'{path}/_{prefix}checkpoint.pt'
-    self.log.info( f'save checkpoint:{saveName}' )
-    if self.verbose:
-        print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
-    torch.save(State,saveName)
+
+
+
+
+
+
+    
+    

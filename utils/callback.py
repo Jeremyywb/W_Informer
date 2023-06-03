@@ -32,8 +32,10 @@ class EarlyStopping:
                 self._early_stop = True
         else:
             self._best_score = score
+            self._best_score_at = on_stop_sc
             self._best_model = model.state_dict()
             self._counter = 0
+
 
 
 
@@ -79,6 +81,20 @@ class History(object):
 
         self.logger.addHandler(file_handler)
         # self.logger.addHandler(stdout_handler)
+
+    def _save_checkpoint(
+        self, 
+        State, #from EarlyStopping
+        val_loss,
+        val_loss_min, #from EarlyStopping
+         path,  #from trainner
+         prefix #from trainner
+    ):
+        saveName = f'{path}/_{prefix}checkpoint.pt'
+        self.logger.info( f'save checkpoint:{saveName}' )
+        if self._verbose:
+            print(f'Validation loss decreased ({val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
+        torch.save(State,saveName)
 
     def on_train_begin(
         self,
