@@ -10,8 +10,6 @@ from copy import deepcopy
 import logging
 
 
-loss = nn.BCELoss()
-
 class torchModel(object):
   """docstring for torchModel"""
   def __init__(
@@ -124,7 +122,7 @@ class torchModel(object):
             }
     on_stop_sc =logs[ f'Valid {self._early_stopping.early_stopping_metric}']
 
-    self._early_stopping( on_stop_sc, self.model ) 
+    self._early_stopping( on_stop_sc, self._model ) 
     self._history._epoch_metrics.update(logs)
     self._history.on_epoch_end(state_dict,epoch,logs)
 
