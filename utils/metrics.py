@@ -1,33 +1,73 @@
+from typing import Any, List, Tuple, Dict
+from abc import ABC, abstractmethod
+import sklearn.metrics as metrics
 import numpy as np
 
-def RSE(pred, true):
-    return np.sqrt(np.sum((true-pred)**2)) / np.sqrt(np.sum((true-true.mean())**2))
-
-def CORR(pred, true):
-    u = ((true-true.mean(0))*(pred-pred.mean(0))).sum(0) 
-    d = np.sqrt(((true-true.mean(0))**2*(pred-pred.mean(0))**2).sum(0))
-    return (u/d).mean(-1)
-
-def MAE(pred, true):
-    return np.mean(np.abs(pred-true))
-
-def MSE(pred, true):
-    return np.mean((pred-true)**2)
-
-def RMSE(pred, true):
-    return np.sqrt(MSE(pred, true))
-
-def MAPE(pred, true):
-    return np.mean(np.abs((pred - true) / true))
-
-def MSPE(pred, true):
-    return np.mean(np.square((pred - true) / true))
-
-def metric(pred, true):
-    mae = MAE(pred, true)
-    mse = MSE(pred, true)
-    rmse = RMSE(pred, true)
-    mape = MAPE(pred, true)
-    mspe = MSPE(pred, true)
+class Metric(ABC):
+    def __init__(self):
+        pass
+    @classmethod
+    def get_metrics_by_names(cls, names: List[str]) -> List["Metric"]:
+        available_metrics = cls.__subclasses__()
+        
+        available_names = [metric._NAME for metric in available_metrics]
+        print(available_names)
+        metrics = []
+        for name in names:
+            assert (name in available_names
+            ), f"{name} is not available, choose in {available_names}"
+            idx = available_names.index(name)
+            metric = available_metrics[idx]()
+            metrics.append(metric)
+        return metrics
     
-    return mae,mse,rmse,mape,mspe
+class ACC(Metric):
+    _NAME = "acc"
+
+    def __init__(
+        self
+    ):
+        super(ACC, self).__init__()
+    def metric_fn(
+        self, 
+        y_true: np.ndarray, 
+        y_score: np.ndarray
+    ) -> float:
+        return metrics.accuracy_score(y_true, y_score)
+
+class F1_macro(Metric):
+    """F1_score.
+    """
+    _NAME = "f1_macro"
+
+    def __init__(
+        self
+    ):
+        super(F1, self).__init__()
+    def metric_fn(
+        self, 
+        y_true: np.ndarray, 
+        y_score: np.ndarray,
+        **kwargs
+    ) -> float:
+        return metrics.f1_score(y_true, y_score, average="macro")
+
+class AUCROC(Metric):
+    """F1_score.
+    """
+    _NAME = "aucroc"
+
+    def __init__(
+        self
+    ):
+        super(F1, self).__init__()
+    def metric_fn(
+        self, 
+        y_true: np.ndarray, 
+        y_score: np.ndarray,
+        **kwargs
+    ) -> float:
+        return metrics.roc_auc_score(y_true,y_score, multi_class='ovo')
+
+
+

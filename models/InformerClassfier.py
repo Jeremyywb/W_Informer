@@ -137,7 +137,7 @@ class Informer(nn.Module):
         x = self._enc_embedding([x,x_cat])
         x, attns = self._encoder(x, attn_mask=enc_self_mask)
         x = self.mlps(x)
-        # x = F.sigmoid(x)
+        x = F.sigmoid(x)
         return x
 
 
