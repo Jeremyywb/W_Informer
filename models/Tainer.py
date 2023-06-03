@@ -8,44 +8,67 @@ from typing import List, Dict, Any, Callable, Optional, Tuple, Union
 from collections import OrderedDict
 from copy import deepcopy
 import logging
+import gc
+import torch
+import numpy as np
+from typing import List, Dict, Any, Callable, Optional, Tuple
 
+class Metric(ABC):
+    def __init__(self):
+        pass
+    @classmethod
+    def get_metrics_by_names(cls, names: List[str]) -> List["Metric"]:
+        available_metrics = cls.__subclasses__()
+        
+        available_names = [metric._NAME for metric in available_metrics]
+        print(available_names)
+        metrics = []
+        for name in names:
+            assert (name in available_names
+            ), f"{name} is not available, choose in {available_names}"
+            idx = available_names.index(name)
+            metric = available_metrics[idx]()
+            metrics.append(metric)
+        return metrics
+
+
+    
 
 class torchModel(object):
-  """docstring for torchModel"""
-  def __init__(
-    self, 
-    model=None,
-    CheckpointPath:str='None',
-    logPath:str='None',
-    logfile:str="None",
-    num_checkpoints:int=10,
-    verbose:int=1
+    """docstring for torchModel"""
+    def __init__(
+      self,
+      model=None,
+      CheckpointPath:str='None',
+      logPath:str='None',
+      logfile:str="None",
+      num_checkpoints:int=10,
+      verbose:int=1
+      ):
 
-    ):
-    super(torchModel, self).__init__()
-    self._model = model
-    self._CheckpointPath = CheckpointPath
-    self._logPath = logPath
-    self._logfile = logfile
-    self._num_checkpoints = num_checkpoints
-    self._verbose = verbose
-  def compile(
-    self,
-    loss=None,
-    optimizer=None,
-    lr:float=1e-3,
-    eval_metrics:List[str]=[],
-    early_stopping=None,
-    history=None
-    ):
-
-    self._loss_fun = loss
-    self._eval_metrics = eval_metrics
+        super(torchModel, self).__init__()
+        self._model = model
+        self._CheckpointPath = CheckpointPath
+        self._logPath = logPath
+        self._logfile = logfile
+        self._num_checkpoints = num_checkpoints
+        self._verbose = verbose
+    def compile(
+      self,
+      loss=None,
+      optimizer=None,
+      lr:float=1e-3,
+      eval_metrics:List[str]=[],
+      early_stopping=None,
+      history=None):
+        self.lr = lr
+        self._loss_fun = loss
+        self._eval_metrics = eval_metrics
 
 
-    self.optimizer = optimizer
-    self._metrics = Metric.get_metrics_by_names(eval_metrics)
-    self._early_stopping = early_stopping
+        self.optimizer = optimizer
+        self._metrics = Metric.get_metrics_by_names(eval_metrics)
+        self._early_stopping = early_stopping
 
     
 
@@ -56,118 +79,113 @@ class torchModel(object):
     #   self.early_stopping_metric = self.metrics[idx]
 
 
-  def fit(
+    def fit(
     self,
     train:DataLoader,
     valid:DataLoader,
-    epochs:int):
+    epochs:int
+    ):
 
     # optim.Adam
-    self._optimizer = self.optimizer(self._model.parameters(), lr=self.lr)
-    self._epochs = epochs
-    self._scheduler = OneCycleLR(optimizer,max_lr = 1e-3, # Upper learning rate boundaries in the cycle for each parameter group
-                       steps_per_epoch = len(train), # The number of steps per epoch to train for.
-                       epochs = epochs, # The number of epochs to train for.
-                       anneal_strategy = 'cos') # 
-    self._history = History(
-      logPath         = self._logPath,
-      logfile         = self._logfile,
-      modelPath       = self._CheckpointPath,
-      epochs          = epochs,
-      num_checkpoints = self._num_checkpoints,
-      verbose         = self._verbose
-      )
+        self._optimizer = self.optimizer(self._model.parameters(), lr=self.lr)
+        self._epochs = epochs
+        self._scheduler = OneCycleLR(self._optimizer,max_lr = 1e-3, # Upper learning rate boundaries in the cycle for each parameter group
+                                steps_per_epoch = len(train), # The number of steps per epoch to train for.
+                                epochs = epochs, # The number of epochs to train for.
+                                anneal_strategy = 'cos') # 
+        self._history = History(
+                    logPath         = self._logPath,
+                    logfile         = self._logfile,
+                    modelPath       = self._CheckpointPath,
+                    epochs          = epochs,
+                    num_checkpoints = self._num_checkpoints,
+                    verbose         = self._verbose
+               )
 
 
-    for epoch in range(epochs):
-      iter_count = 0
-      train_loss = []
-      self._model.train()
-
-      self._on_epoch_begin(epoch)
-      for batch_idx, batch in enumerate(train):
-        self._optimizer.zero_grad()
-        output,y_true = self._process_one_batch(batch)
-        self._loss = self._loss_fun(output, y_true)
-        train_loss.append(self._loss.item())
-
-        self._loss.backward()
-        self._optimizer.step()
-        self._scheduler.step()
-      train_loss = np.average(train_loss)
-      epoch_logs = {"lr": self._optimizer.get_lr(),'Train Loss': train_loss}
+        for epoch in range(epochs):
+            iter_count = 0
+            train_loss = []
+            self._model.train()
       
-      self._model.eval()
-      eval_epoch_logs = self._eval_epoch(valid)
-      epoch_logs.update( eval_epoch_logs )
+            self._on_epoch_begin(epoch)
+            for batch_idx, batch in enumerate(train):
+                self._optimizer.zero_grad()
+                output,y_true = self._process_one_batch(batch)
+                self._loss = self._loss_fun(output, y_true)
+                train_loss.append(self._loss.item())
+      
+                self._loss.backward()
+                self._optimizer.step()
+                self._scheduler.step()
+            train_loss = np.average(train_loss)
+            epoch_logs = {"lr": self._optimizer.get_lr(),'Train Loss': train_loss}
+      
+            self._model.eval()
+            eval_epoch_logs = self._eval_epoch(valid)
+            epoch_logs.update( eval_epoch_logs )
 
-      self._on_epoch_end(epoch,epoch_logs)
-      if self._early_stopping._early_stop:
-        self._history._save_checkpoint( 
-            self._early_stopping._best_model,
-            self._early_stopping._best_score_at,
-            self._early_stopping.val_loss_min,
-            self._CheckpointPath,
-            'OneFOldBest'
+            self._on_epoch_end(epoch,epoch_logs)
+            if self._early_stopping._early_stop:
+                self._history._save_checkpoint( 
+                    self._early_stopping._best_model,
+                    self._early_stopping._best_score_at,
+                    self._early_stopping.val_loss_min,
+                    self._CheckpointPath,
+                    'OneFOldBest'
 
-            ) 
-
-  def _on_epoch_begin(self,epoch):
-    self._history.on_epoch_begin(epoch)
-  def _on_epoch_end(self,epoch,logs):
-    state_dict = {
-      'modelstate_dict': self._model.state_dict(),
-      'optimizer_state_dict': self._optimizer.state_dict(),
-      'scheduler_state_dict': self._scheduler.state_dict()
+                    ) 
+    def _on_epoch_begin(self,epoch):
+        self._history.on_epoch_begin(epoch)
+    def _on_epoch_end(self,epoch,logs):
+        state_dict = {
+          'modelstate_dict': self._model.state_dict(),
+          'optimizer_state_dict': self._optimizer.state_dict(),
+          'scheduler_state_dict': self._scheduler.state_dict()
             }
-    on_stop_sc =logs[ f'Valid {self._early_stopping.early_stopping_metric}']
+        on_stop_sc =logs[ f'Valid {self._early_stopping.early_stopping_metric}']
 
-    self._early_stopping( on_stop_sc, self._model ) 
-    self._history._epoch_metrics.update(logs)
-    self._history.on_epoch_end(state_dict,epoch,logs)
+        self._early_stopping( on_stop_sc, self._model ) 
+        self._history._epoch_metrics.update(logs)
+        self._history.on_epoch_end(state_dict,epoch,logs)
 
-  @torch.no_grad()
-  def _eval_epoch(self,eval_loader):
-    eval_loss_total = 0
-    for i, batch_data in enumerate(eval_loader):
-      output,y = self._process_one_batch(batch)
-      _loss = self._loss_fun(output, y)
-      eval_loss_total += _loss.item()
-      if i == 0:
-          y_true = y.detach().cpu()
-          y_pred = output.detach().cpu()
-      else:
-          # Avoid situ ation that batch_size is just equal to 1
-          y_true = torch.cat((y_true, y.detach().cpu()))
-          y_pred = torch.cat((y_pred, output.detach().cpu()))
+    @torch.no_grad()
+    def _eval_epoch(self,eval_loader,thres=0.63):
+        eval_loss_total = 0
+        for i, batch_data in enumerate(eval_loader):
+            output,y = self._process_one_batch(batch_data)
+            loss = self._loss_fun(output, y)
+            eval_loss_total += _loss.item()
+            if i == 0:
+                y_true = y.detach().cpu()
+                y_pred = output.detach().cpu()
+            else:
+                # Avoid situ ation that batch_size is just equal to 1
+                y_true = torch.cat((y_true, y.detach().cpu()))
+                y_pred = torch.cat((y_pred, output.detach().cpu()))
 
-            del x, y, output
-            _ = gc.collect()
+                del y, output
+                _ = gc.collect()
 
-    eval_loss_avg = eval_loss_total / len(self.eval_loader)
-    eval_result = self.evaluator.evaluate(y_true, y_pred)
-    eval_epoch_logs = {'Valid Loss':eval_loss_avg}
-    for evname,metric in zip(self._eval_metrics,self._metrics):
-      if evname == 'f1_macro':
-        y_pred1 = (y_pred.numpy().reshape(-1, ) > thres).astype("int")
-        y_true1 = y_true.numpy().reshape(-1, )
-      else:
-        y_pred1 = y_pred.numpy()
-        y_true1 = y_true.numpy()
-      _score  = metric.metric_fn(y_true1, y_pred1)
-      eval_epoch_logs[f'Valid {evname}'] = _score
-    return eval_epoch_logs
-
-
-  def _process_one_batch(self,batch):
-    raise NotImplementedError()
-  def predict(self,batch):
-    raise NotImplementedError()
+        eval_loss_avg = eval_loss_total / len(self.eval_loader)
+        eval_result = self.evaluator.evaluate(y_true, y_pred)
+        eval_epoch_logs = {'Valid Loss':eval_loss_avg}
+        for evname,metric in zip(self._eval_metrics,self._metrics):
+            if evname == 'f1_macro':
+                y_pred1 = (y_pred.numpy().reshape(-1, ) > thres).astype("int")
+                y_true1 = y_true.numpy().reshape(-1, )
+            else:
+                y_pred1 = y_pred.numpy()
+                y_true1 = y_true.numpy()
+            _score  = metric.metric_fn(y_true1, y_pred1)
+            eval_epoch_logs[f'Valid {evname}'] = _score
+        del y_pred1,y_true1,y_pred,y_true
+        _ = gc.collect()
+        return eval_epoch_logs
 
 
+    def _process_one_batch(self,batch):
+        raise NotImplementedError()
+    def predict(self,batch):
+        raise NotImplementedError()
 
-
-
-
-    
-    
