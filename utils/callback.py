@@ -60,13 +60,15 @@ class History(object):
         modelPath:str='path/to/model/',
         epochs:int=1,
         num_checkpoints:int=10,
+
         verbose: int = 1
     ):
         super(History, self).__init__()
         self._verbose = verbose
         self.modelPath = modelPath
+        
         self._epochs = epochs
-        self._per_epoch = max(1,int(self.epochs/ num_checkpoints))
+        self._per_epoch = max(1,int(self._epochs/ num_checkpoints))
         self.logger = logging.getLogger()
         self.logger.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')

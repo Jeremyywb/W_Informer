@@ -43,7 +43,7 @@ class F1_macro(Metric):
     def __init__(
         self
     ):
-        super(F1, self).__init__()
+        super(F1_macro, self).__init__()
     def metric_fn(
         self, 
         y_true: np.ndarray, 
@@ -60,7 +60,7 @@ class AUCROC(Metric):
     def __init__(
         self
     ):
-        super(F1, self).__init__()
+        super(AUCROC, self).__init__()
     def metric_fn(
         self, 
         y_true: np.ndarray, 

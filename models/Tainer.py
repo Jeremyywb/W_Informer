@@ -1,58 +1,44 @@
-from torch.optim.lr_scheduler import OneCycleLR
+from typing import List, Dict, Any, Callable, Optional, Tuple
+from typing import List, Dict, Any, Callable, Optional, Tuple, Union
 from torch.optim.lr_scheduler import ExponentialLR
+from torch.utils.data import Dataset, DataLoader
+from torch.optim.lr_scheduler import OneCycleLR
 from utils.callback import EarlyStopping
+from collections import OrderedDict
 from utils.callback import History
 from utils.metrics import Metric
-from torch.utils.data import Dataset, DataLoader
-from typing import List, Dict, Any, Callable, Optional, Tuple, Union
-from collections import OrderedDict
 from copy import deepcopy
-import logging
-import gc
-import torch
 import numpy as np
-from typing import List, Dict, Any, Callable, Optional, Tuple
-
-class Metric(ABC):
-    def __init__(self):
-        pass
-    @classmethod
-    def get_metrics_by_names(cls, names: List[str]) -> List["Metric"]:
-        available_metrics = cls.__subclasses__()
-        
-        available_names = [metric._NAME for metric in available_metrics]
-        print(available_names)
-        metrics = []
-        for name in names:
-            assert (name in available_names
-            ), f"{name} is not available, choose in {available_names}"
-            idx = available_names.index(name)
-            metric = available_metrics[idx]()
-            metrics.append(metric)
-        return metrics
-
-
-    
+import logging
+import torch
+import gc
+import os
 
 class torchModel(object):
     """docstring for torchModel"""
     def __init__(
       self,
       model=None,
+      cfg=None,
       CheckpointPath:str='None',
       logPath:str='None',
       logfile:str="None",
-      num_checkpoints:int=10,
-      verbose:int=1
+      num_checkpoints:int=10
+      
       ):
 
         super(torchModel, self).__init__()
         self._model = model
+        self._cfg = cfg
         self._CheckpointPath = CheckpointPath
         self._logPath = logPath
         self._logfile = logfile
         self._num_checkpoints = num_checkpoints
-        self._verbose = verbose
+        
+        if not os.path.exists(CheckpointPath):
+            os.mkdir(CheckpointPath)        
+        if not os.path.exists(logPath):
+            os.mkdir(logPath)
     def compile(
       self,
       loss=None,
@@ -60,12 +46,12 @@ class torchModel(object):
       lr:float=1e-3,
       eval_metrics:List[str]=[],
       early_stopping=None,
-      history=None):
-        self.lr = lr
+      verbose:int=1
+      ):
+        self._lr = lr
+        self._verbose = verbose
         self._loss_fun = loss
         self._eval_metrics = eval_metrics
-
-
         self.optimizer = optimizer
         self._metrics = Metric.get_metrics_by_names(eval_metrics)
         self._early_stopping = early_stopping
@@ -87,7 +73,10 @@ class torchModel(object):
     ):
 
     # optim.Adam
-        self._optimizer = self.optimizer(self._model.parameters(), lr=self.lr)
+        self._optimizer = self.optimizer(
+                    self._model.parameters(),
+                    lr=self._lr,
+                    weight_decay=self._cfg.WEIGHT_DECAY)
         self._epochs = epochs
         self._scheduler = OneCycleLR(self._optimizer,max_lr = 1e-3, # Upper learning rate boundaries in the cycle for each parameter group
                                 steps_per_epoch = len(train), # The number of steps per epoch to train for.
