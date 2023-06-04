@@ -127,7 +127,7 @@ class CatesEmbedding(nn.Module):
         self, 
         list_vocab_sizes ,
         list_embed_dims  ,
-        tot_cat_emb_dim  ,
+        tot_cat_emb_dim  ,#1280
         ):
 
         super(CatesEmbedding, self).__init__()
@@ -138,9 +138,11 @@ class CatesEmbedding(nn.Module):
             )
         combin_dims = sum(list_embed_dims)
         self._emb_enc = nn.Sequential(
-            nn.Linear(combin_dims, combin_dims*2 ),
+            nn.Linear(combin_dims, combin_dims ),
             nn.ReLU(),
-            nn.Linear(combin_dims*2, tot_cat_emb_dim),
+            nn.Linear(combin_dims, int(combin_dims/2) ),
+            nn.ReLU(),
+            nn.Linear(int(combin_dims/2) tot_cat_emb_dim),
             nn.ReLU(),
         )
         

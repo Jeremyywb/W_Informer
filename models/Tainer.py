@@ -95,22 +95,11 @@ class torchModel(object):
         self._history.on_train_begin( {"start_time": time.time()} )
         for epoch in range(epochs):
             iter_count = 0
-            train_loss = []
+            
             self._model.train()
-      
             self._on_epoch_begin(epoch)
-            for batch_idx, batch in enumerate(train):
-                self._optimizer.zero_grad()
-                output,y_true = self._process_one_batch(batch)
-                self._loss = self._loss_fun(output, y_true)
-                train_loss.append(self._loss.item())
-      
-                self._loss.backward()
-                self._optimizer.step()
-                self._scheduler.step()
-            train_loss = np.average(train_loss)
-            epoch_logs = {"lr": self._scheduler.get_lr(),'Train Loss': train_loss}
-      
+            epoch_logs = self._train_epoch(train)
+
             self._model.eval()
             eval_epoch_logs = self._eval_epoch(valid)
             epoch_logs.update( eval_epoch_logs )
@@ -125,6 +114,7 @@ class torchModel(object):
                     'OneFOldBest'
 
                     ) 
+                break
     def _on_epoch_begin(self,epoch):
         self._history.on_epoch_begin(epoch)
     def _on_epoch_end(self,epoch,logs):
@@ -138,7 +128,20 @@ class torchModel(object):
         self._early_stopping( on_stop_sc, self._model ) 
         self._history._epoch_metrics.update(logs)
         self._history.on_epoch_end(state_dict,epoch,logs)
-
+    def _train_epoch(self,train_loader):
+        train_loss = []
+        for batch_idx, batch in enumerate(train):
+            self._optimizer.zero_grad()
+            output,y_true = self._process_one_batch(batch)
+            self._loss = self._loss_fun(output, y_true)
+            train_loss.append(self._loss.item())
+  
+            self._loss.backward()
+            self._optimizer.step()
+            self._scheduler.step()
+        train_loss = np.average(train_loss)
+        epoch_logs = {"lr": self._scheduler.get_lr(),'Train Loss': train_loss}
+        return epoch_logs
     @torch.no_grad()
     def _eval_epoch(self,eval_loader,thres=0.63):
         eval_loss_total = 0
@@ -161,13 +164,19 @@ class torchModel(object):
         eval_epoch_logs = {'Valid Loss':eval_loss_avg}
         for evname,metric in zip(self._eval_metrics,self._metrics):
             if evname == 'f1_macro':
-                y_pred1 = (y_pred.numpy().reshape(-1, ) > thres).astype("int")
+                
                 y_true1 = y_true.numpy().reshape(-1, )
+                for o in self._cfg.CKPT_METRIC:
+                    # float("f1@0.49".split('@')[1])
+                    thres = float(o.split('@')[1])
+                    y_pred1 = (y_pred.numpy().reshape(-1, ) > thres).astype("int")
+                    _score  = metric.metric_fn(y_true1, y_pred1)
+                    eval_epoch_logs[f'Valid {thres}'] = _score
             else:
                 y_pred1 = y_pred.numpy()
                 y_true1 = y_true.numpy()
-            _score  = metric.metric_fn(y_true1, y_pred1)
-            eval_epoch_logs[f'Valid {evname}'] = _score
+                _score  = metric.metric_fn(y_true1, y_pred1)
+                eval_epoch_logs[f'Valid {evname}'] = _score
         del y_pred1,y_true1,y_pred,y_true
         _ = gc.collect()
         return eval_epoch_logs

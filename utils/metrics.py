@@ -69,5 +69,3 @@ class AUCROC(Metric):
     ) -> float:
         return np.mean(metrics.roc_auc_score(y_true,y_score, average=None))
 
-
-

@@ -34,19 +34,19 @@ class Informer(nn.Module):
         list_embed_dims,
         tot_cat_emb_dim, 
         input_seq_len,
-        final_emb_dim=512,
+        final_emb_dim=256,
         dropout=0.1,
         factor=5,
         output_attention = False,
         n_heads=8,
-        d_ff=512,
+        d_ff=256,
         activation='gelu',
         distil=True,
         num_class=3,
         n_e_l=3,
         attn='prob',
         mix=True,
-        device=torch.device('cuda:0')):
+        device=torch.device('cuda')):
         super(Informer, self).__init__()
 
         # Encoding
@@ -60,6 +60,7 @@ class Informer(nn.Module):
                         final_emb_dim, 
                         dropout)#(bs,seq,final_emb_dim)
         # Attention
+        self._ontop_down_conv1D = ConvLayer(final_emb_dim) 
         Attn = ProbAttention if attn=='prob' else FullAttention
         att_ = {
          "mask_flag":False, 
@@ -85,30 +86,14 @@ class Informer(nn.Module):
                  for l in range(n_e_l-1) ] if distil else None,
                  norm_layer=torch.nn.LayerNorm(final_emb_dim) 
                  )
-        # Encoder
-        # self._encoder = Encoder(
-        #         [EncoderLayer(
-        #                 AttentionLayer(
-        #                     Attn(False, factor, 
-        #                         attention_dropout=dropout,
-        #                         output_attention=output_attention), 
-        #                     final_emb_dim, 
-        #                     n_heads, 
-        #                     mix=False ),
-        #                 final_emb_dim,d_ff,
-        #                 dropout=dropout,
-        #                 activation=activation ) for o in range(n_e_l)  ],
-        #         [ConvLayer(final_emb_dim) for l in range(n_e_l-1) ] if distil else None,
-        #         norm_layer=torch.nn.LayerNorm(final_emb_dim) 
-        #         )
-        
+        self._att_previous = AttentionLayer(Attn(**att_),**attl_)
+        self._dropout_prev = nn.Dropout(p=dropout)
 
-        # self.end_conv1 = nn.Conv1d(in_channels=label_len+out_len, out_channels=out_len, kernel_size=1, bias=True)
-        # self.end_conv2 = nn.Conv1d(in_channels=final_emb_dim, out_channels=c_out, kernel_size=1, bias=True)
-        out_len_seq = self.pooling_out_len(Lin=input_seq_len ,num_pool= n_e_l-1)
+        conv1d_seq_len = self.pooling_out_len(Lin=input_seq_len ,num_pool=1)
+        self.out_len_seq = self.pooling_out_len(Lin=conv1d_seq_len ,num_pool= n_e_l-1)
         self.mlps = nn.Sequential(
                     nn.Flatten(),
-                    nn.Linear( out_len_seq*final_emb_dim,final_emb_dim ),
+                    nn.Linear( self.out_len_seq*final_emb_dim,final_emb_dim ),
                     nn.ReLU(),
                     nn.Dropout(p=dropout),
                     nn.Linear( final_emb_dim,128 ),
@@ -117,7 +102,7 @@ class Informer(nn.Module):
                     nn.Linear( 128,num_class )
                     )
         
-        
+
     def pooling_out_len(
         self,
         Lin,
@@ -132,13 +117,24 @@ class Informer(nn.Module):
         self, 
         x, 
         x_cat, 
-        enc_self_mask=None, 
+        enc_self_mask=None,
+        previous_state=None,
+        output_seq_states=False
         ):
         x = self._enc_embedding([x,x_cat])
+        x = self._ontop_down_conv1D(x)
+        if previous_state is not None:
+            new_x, attn = self._att_previous(
+            x, previous_state, previous_state,
+            attn_mask = None
+             )
+            x = x + self._dropout_prev(new_x)
         x, attns = self._encoder(x, attn_mask=enc_self_mask)
-        x = self.mlps(x)
-        x = F.sigmoid(x)
-        return x
+        score = self.mlps(x)
+        score = F.sigmoid(score)
+        if output_seq_states:
+            return x
+        return score
 
 
 class InformerStack(nn.Module):
