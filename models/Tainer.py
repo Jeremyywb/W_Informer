@@ -10,6 +10,7 @@ from utils.metrics import Metric
 from copy import deepcopy
 import numpy as np
 import logging
+import time
 import torch
 import gc
 import os
@@ -91,7 +92,7 @@ class torchModel(object):
                     verbose         = self._verbose
                )
 
-
+        self._history.on_train_begin( {"start_time": time.time()} )
         for epoch in range(epochs):
             iter_count = 0
             train_loss = []
@@ -108,7 +109,7 @@ class torchModel(object):
                 self._optimizer.step()
                 self._scheduler.step()
             train_loss = np.average(train_loss)
-            epoch_logs = {"lr": self._optimizer.get_lr(),'Train Loss': train_loss}
+            epoch_logs = {"lr": self._scheduler.get_lr(),'Train Loss': train_loss}
       
             self._model.eval()
             eval_epoch_logs = self._eval_epoch(valid)
@@ -118,8 +119,8 @@ class torchModel(object):
             if self._early_stopping._early_stop:
                 self._history._save_checkpoint( 
                     self._early_stopping._best_model,
-                    self._early_stopping._best_score_at,
-                    self._early_stopping.val_loss_min,
+                    self._early_stopping.score,
+                    self._early_stopping._best_score,
                     self._CheckpointPath,
                     'OneFOldBest'
 
@@ -144,7 +145,7 @@ class torchModel(object):
         for i, batch_data in enumerate(eval_loader):
             output,y = self._process_one_batch(batch_data)
             loss = self._loss_fun(output, y)
-            eval_loss_total += _loss.item()
+            eval_loss_total += loss.item()
             if i == 0:
                 y_true = y.detach().cpu()
                 y_pred = output.detach().cpu()
@@ -156,8 +157,7 @@ class torchModel(object):
                 del y, output
                 _ = gc.collect()
 
-        eval_loss_avg = eval_loss_total / len(self.eval_loader)
-        eval_result = self.evaluator.evaluate(y_true, y_pred)
+        eval_loss_avg = eval_loss_total / len(eval_loader)
         eval_epoch_logs = {'Valid Loss':eval_loss_avg}
         for evname,metric in zip(self._eval_metrics,self._metrics):
             if evname == 'f1_macro':

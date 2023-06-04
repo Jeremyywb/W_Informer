@@ -67,9 +67,7 @@ class AUCROC(Metric):
         y_score: np.ndarray,
         **kwargs
     ) -> float:
-        return metrics.roc_auc_score(y_true,y_score, multi_class='ovo')
+        return np.mean(metrics.roc_auc_score(y_true,y_score, average=None))
 
 
 
-
-        

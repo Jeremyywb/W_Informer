@@ -1,8 +1,11 @@
+from typing import List, Dict, Any, Callable, Optional, Tuple
 import numpy as np
 import logging
 import sys
 import torch
-from typing import List, Dict, Any, Callable, Optional, Tuple
+import time
+import datetime
+import copy
 
 
 class EarlyStopping:
@@ -12,27 +15,25 @@ class EarlyStopping:
         self._counter = 0
         self._best_score = None
         self._early_stop = False
-        self._val_loss_min = np.Inf
         self._MAXIMIZE = max_minze
         self._delta = delta
         self.early_stopping_metric = early_stopping_metric
 
     def __call__(self, on_stop_sc, model):
         if self._MAXIMIZE:
-            score = on_stop_sc
+            self.score = on_stop_sc
         else:
-            score = -on_stop_sc
+            self.score = -on_stop_sc
 
         if self._best_score is None:
-            self._best_score = score
-        elif score < self._best_score + self._delta:
+            self._best_score = self.score
+        elif self.score < self._best_score + self._delta:
             self._counter += 1
             print(f'EarlyStopping counter: {self._counter} out of {self._patience}')
             if self._counter >= self._patience:
                 self._early_stop = True
         else:
-            self._best_score = score
-            self._best_score_at = on_stop_sc
+            self._best_score = self.score
             self._best_model = model.state_dict()
             self._counter = 0
 
@@ -87,15 +88,15 @@ class History(object):
     def _save_checkpoint(
         self, 
         State, #from EarlyStopping
-        val_loss,
-        val_loss_min, #from EarlyStopping
+        score,
+        best_score, #from EarlyStopping
          path,  #from trainner
          prefix #from trainner
     ):
         saveName = f'{path}/_{prefix}checkpoint.pt'
         self.logger.info( f'save checkpoint:{saveName}' )
         if self._verbose:
-            print(f'Validation loss decreased ({val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
+            print(f'Validation score decreased ({best_score:.6f} --> {score:.6f}).  Saving model ...')
         torch.save(State,saveName)
 
     def on_train_begin(
@@ -155,7 +156,7 @@ class History(object):
                 msg += f"| {metric_name:<3}: {metric_value:.6f}"
         total_time = int(time.time() - self._start_time)
         msg += f"| {str(datetime.timedelta(seconds=total_time)) + 's':<6}" 
-        print(msg)
+        # print(msg)
         self.logger.info(msg)
 
     def on_batch_end(
