@@ -142,8 +142,8 @@ class CatesEmbedding(nn.Module):
             nn.ReLU(),
             nn.Linear(combin_dims, int(combin_dims/2) ),
             nn.ReLU(),
-            nn.Linear(int(combin_dims/2) tot_cat_emb_dim),
-            nn.ReLU(),
+            nn.Linear(int(combin_dims/2), tot_cat_emb_dim),
+            nn.ReLU()
         )
         
     def forward(self, x_cat):
