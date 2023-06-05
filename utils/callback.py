@@ -156,7 +156,7 @@ class History(object):
                 msg += f"| {metric_name:<3}: {metric_value:.6f}"
         total_time = int(time.time() - self._start_time)
         msg += f"| {str(datetime.timedelta(seconds=total_time)) + 's':<6}" 
-        # print(msg)
+        print(msg)
         self.logger.info(msg)
 
     def on_batch_end(
