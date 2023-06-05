@@ -171,7 +171,7 @@ class torchModel(object):
                     thres = float(o.split('@')[1])
                     y_pred1 = (y_pred.numpy().reshape(-1, ) > thres).astype("int")
                     _score  = metric.metric_fn(y_true1, y_pred1)
-                    eval_epoch_logs[f'Valid {thres}'] = _score
+                    eval_epoch_logs[f'Valid {o}'] = _score
             else:
                 y_pred1 = y_pred.numpy()
                 y_true1 = y_true.numpy()
