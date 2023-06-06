@@ -134,12 +134,12 @@ class Informer(nn.Module):
         x, attns = self._encoder(x, attn_mask=enc_self_mask)
 
 
-        x_std = torch.std(x, dim=-1)  # Std pooling
-        x_mean = torch.mean(x, dim=-1)  # Mean pooling
+        x_std = torch.std(x, dim=1)  # x(B,L,D)->(B,D) Std pooling
+        x_mean = torch.mean(x, dim=1)  # Mean pooling
         score = torch.cat([x_std, x_mean], dim=1)
         score = self.mlps( score )
         score = F.sigmoid(score)
-        
+
         if output_seq_states:
             return x
         return score
