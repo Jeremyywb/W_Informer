@@ -91,9 +91,11 @@ class Informer(nn.Module):
 
         conv1d_seq_len = self.pooling_out_len(Lin=input_seq_len ,num_pool=1)
         self.out_len_seq = self.pooling_out_len(Lin=conv1d_seq_len ,num_pool= n_e_l-1)
+        # V2 del flatten /add mean/std polling
         self.mlps = nn.Sequential(
-                    nn.Flatten(),
-                    nn.Linear( self.out_len_seq*final_emb_dim,final_emb_dim ),
+                    # nn.Flatten(),
+                    # nn.Linear( self.out_len_seq*final_emb_dim,final_emb_dim ),
+                    nn.Linear( final_emb_dim*2,final_emb_dim ),#（256*2->256）
                     nn.ReLU(),
                     nn.Dropout(p=dropout),
                     nn.Linear( final_emb_dim,128 ),
@@ -130,8 +132,14 @@ class Informer(nn.Module):
              )
             x = x + self._dropout_prev(new_x)
         x, attns = self._encoder(x, attn_mask=enc_self_mask)
-        score = self.mlps(x)
+
+
+        x_std = torch.std(x, dim=-1)  # Std pooling
+        x_mean = torch.mean(x, dim=-1)  # Mean pooling
+        score = torch.cat([x_std, x_mean], dim=1)
+        score = self.mlps( score )
         score = F.sigmoid(score)
+        
         if output_seq_states:
             return x
         return score
@@ -218,4 +226,12 @@ class InformerStack(nn.Module):
 
             
 
-        
+        #         x = x.view(-1, 64*5*5) # Flatten layer
+        # x = self.dropout(self.fc1(x))
+        # x = self.dropout(self.fc2(x))
+        # x = F.log_softmax(self.fc3(x),dim = 1)
+        #         self.hidden = nn.Linear(4, 8)
+        # self.act = nn.ReLU()
+        # self.output = nn.Linear(8, 3)
+        #         self.layer_1 = nn.Linear(in_features=2, out_features=5) # takes in 2 features (X), produces 5 features
+        # self.layer_2 = nn.Linear(in_features=5, out_features=1) #
