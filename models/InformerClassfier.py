@@ -151,7 +151,7 @@ class InformerStackClf(nn.Module):
 
     Args:
         token_dim(int)  : input numric feature dim
-        n_e_l           : num of encoder_layers
+        e_layers            : num of encoder_layers in each encoder
         token_emb_dim(int)  : output dim of numeric timeseries
         list_vocab_sizes    : input  vocab size list of each category timeseries
         tot_cat_emb_dim(int): sum of all category embedding dims
@@ -277,7 +277,7 @@ class InformerStackClf(nn.Module):
         output_seq_states=False
         ):
         x = self._enc_embedding([x,x_cat])
-        # x = self._ontop_down_conv1D(x)
+        x = self._ontop_down_conv1D(x)
         
         if previous_state is not None:
             new_x, attn = self._att_previous(
