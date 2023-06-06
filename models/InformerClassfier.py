@@ -124,7 +124,8 @@ class Informer(nn.Module):
         output_seq_states=False
         ):
         x = self._enc_embedding([x,x_cat])
-        x = self._ontop_down_conv1D(x)
+        # x = self._ontop_down_conv1D(x)
+        
         if previous_state is not None:
             new_x, attn = self._att_previous(
             x, previous_state, previous_state,
