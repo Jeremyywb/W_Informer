@@ -89,8 +89,8 @@ class Informer(nn.Module):
         self._att_previous = AttentionLayer(Attn(**att_),**attl_)
         self._dropout_prev = nn.Dropout(p=dropout)
 
-        conv1d_seq_len = self.pooling_out_len(Lin=input_seq_len ,num_pool=1)
-        self.out_len_seq = self.pooling_out_len(Lin=conv1d_seq_len ,num_pool= n_e_l-1)
+        # conv1d_seq_len = self.pooling_out_len(Lin=input_seq_len ,num_pool=1)
+        # self.out_len_seq = self.pooling_out_len(Lin=conv1d_seq_len ,num_pool= n_e_l-1)
         # V2 del flatten /add mean/std polling
         self.mlps = nn.Sequential(
                     # nn.Flatten(),
@@ -241,8 +241,8 @@ class InformerStackClf(nn.Module):
         self._att_previous = AttentionLayer(Attn(**att_),**attl_)
         self._dropout_prev = nn.Dropout(p=dropout)
 
-        conv1d_seq_len = self.pooling_out_len(Lin=input_seq_len ,num_pool=1)
-        self.out_len_seq = self.pooling_out_len(Lin=conv1d_seq_len ,num_pool= n_e_l-1)
+        # conv1d_seq_len = self.pooling_out_len(Lin=input_seq_len ,num_pool=1)
+        # self.out_len_seq = self.pooling_out_len(Lin=conv1d_seq_len ,num_pool= n_e_l-1)
         # V2 del flatten /add mean/std polling
         
         self.mlps = nn.Sequential(
