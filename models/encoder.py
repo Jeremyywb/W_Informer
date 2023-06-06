@@ -95,8 +95,8 @@ class EncoderStack(nn.Module):
         # x [B, L, D]
         x_stack = []; attns = []
         for i_len, encoder in zip(self.inp_lens, self.encoders):
-            inp_len = x.shape[1]//(2**i_len)
-            # inp_len = (x.shape[1]-1)//(2**i_len)
+            inp_len = x.shape[1]//(2**i_len)#choose shape of input len
+            # inp_len = (x.shape[1]-1)//(2**i_len) 512/256/128
             # input from original from couputed length -input_len
             x_s, attn = encoder(x[:, -inp_len:, :])
             x_stack.append(x_s); attns.append(attn)
