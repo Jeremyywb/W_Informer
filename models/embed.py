@@ -127,7 +127,7 @@ class CatesEmbedding(nn.Module):
         self, 
         list_vocab_sizes ,
         list_embed_dims  ,
-        tot_cat_emb_dim  ,#1280
+        tot_cat_emb_dim  ,
         ):
 
         super(CatesEmbedding, self).__init__()
@@ -136,15 +136,15 @@ class CatesEmbedding(nn.Module):
                 for vocab_sizes,embed_dim in zip(list_vocab_sizes,list_embed_dims)
                 ]
             )
-        combin_dims = sum(list_embed_dims)
-        self._emb_enc = nn.Sequential(
-            nn.Linear(combin_dims, combin_dims ),
-            nn.ReLU(),
-            nn.Linear(combin_dims, int(combin_dims/2) ),
-            nn.ReLU(),
-            nn.Linear(int(combin_dims/2), tot_cat_emb_dim),
-            nn.ReLU()
-        )
+        # combin_dims = sum(list_embed_dims)
+        # self._emb_enc = nn.Sequential(
+        #     nn.Linear(combin_dims, combin_dims ),
+        #     nn.ReLU(),
+        #     nn.Linear(combin_dims, int(combin_dims/2) ),
+        #     nn.ReLU(),
+        #     nn.Linear(int(combin_dims/2), tot_cat_emb_dim),
+        #     nn.ReLU()
+        # )
         
     def forward(self, x_cat):
         embeddings = []
@@ -157,7 +157,9 @@ class CatesEmbedding(nn.Module):
         
         # print('*********before cat embs *********')
         # print(embeddings.shape)
-        embeddings = self._emb_enc(embeddings)
+        # embeddings = self._emb_enc(embeddings) #commented
+
+
         # print('*********after cat embs *********')
         # print(embeddings.shape)
         return embeddings
@@ -203,13 +205,21 @@ class CollectEmbedding(nn.Module):
                                        # args... 
                                        ) ] )
         
+        # self._emb_dim_proj = nn.Sequential(
+        #             nn.Linear( all_embed_dim,all_embed_dim ),
+        #             nn.ReLU(),
+        #             nn.Dropout(p=dropout),
+        #             nn.Linear( all_embed_dim,final_emb_dim ),
+        #             nn.Dropout(p=dropout)
+        #     )#commented
+
         self._emb_dim_proj = nn.Sequential(
-                    nn.Linear( all_embed_dim,all_embed_dim ),
+                    nn.Linear( all_embed_dim,all_embed_dim*2 ),
                     nn.ReLU(),
-                    nn.Dropout(p=dropout),
-                    nn.Linear( all_embed_dim,final_emb_dim ),
-                    nn.ReLU(),
-                    nn.Dropout(p=dropout)
+                    # nn.Dropout(p=dropout),
+                    # nn.Linear( all_embed_dim,final_emb_dim ),
+                    nn.Linear( all_embed_dim*2,all_embed_dim ),
+                    # nn.Dropout(p=dropout)
             )
         
         self.dropout = nn.Dropout(p=dropout)
@@ -239,8 +249,7 @@ class CollectEmbedding(nn.Module):
         o = torch.cat(e, axis=2 )
         # print('*********concat.shape*********')
         # print(o.shape)
-        o = self._emb_dim_proj( o )
-        o = o + p
-
-        return self.dropout( o )#(bs,seq,final_emb_dim)
+        o = self._emb_dim_proj( o )+o
+        o = self.dropout(o)
+        return o + p#(bs,seq,all_embed_dim)
 

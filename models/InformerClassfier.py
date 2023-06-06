@@ -58,7 +58,7 @@ class Informer(nn.Module):
                         list_embed_dims,
                         tot_cat_emb_dim, 
                         final_emb_dim, 
-                        dropout)#(bs,seq,final_emb_dim)
+                        dropout)#(bs,seq,final_emb_dim)256
         # Attention
         self._ontop_down_conv1D = ConvLayer(final_emb_dim) 
         Attn = ProbAttention if attn=='prob' else FullAttention
@@ -235,3 +235,5 @@ class InformerStack(nn.Module):
         # self.output = nn.Linear(8, 3)
         #         self.layer_1 = nn.Linear(in_features=2, out_features=5) # takes in 2 features (X), produces 5 features
         # self.layer_2 = nn.Linear(in_features=5, out_features=1) #
+
+        # ['acc', 'f1_macro', 'aucroc']

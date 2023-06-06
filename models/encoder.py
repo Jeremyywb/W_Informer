@@ -32,7 +32,7 @@ class EncoderLayer(nn.Module):
         d_ff = d_ff or 4*d_model
         self.attention = attention
         self.conv1 = nn.Conv1d(in_channels=d_model, out_channels=d_ff, kernel_size=1)
-        # seq_len->seq_len
+        # seq_len->seq_len feed forward layer(ffn) use conv1D kernel==1
         self.conv2 = nn.Conv1d(in_channels=d_ff, out_channels=d_model, kernel_size=1)
         # seq_len->seq_len
         self.norm1 = nn.LayerNorm(d_model)
