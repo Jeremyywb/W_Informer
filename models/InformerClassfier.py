@@ -187,7 +187,7 @@ class InformerStackClf(nn.Module):
         attn='prob',
         mix=True,
         device=torch.device('cuda')):
-        super(Informer, self).__init__()
+        super(InformerStackClf, self).__init__()
 
         # Encoding
 

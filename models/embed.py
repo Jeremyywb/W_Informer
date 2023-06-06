@@ -252,4 +252,4 @@ class CollectEmbedding(nn.Module):
         o = self._emb_dim_proj( o )+o
         o = self.dropout(o)
         return o + p#(bs,seq,all_embed_dim)
-
+        
