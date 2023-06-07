@@ -105,6 +105,7 @@ class Dataset_Custom(Dataset):
         seq_y_mark = self.data_stamp[r_begin:r_end]
 
         return seq_x, seq_y, seq_x_mark, seq_y_mark
+        # seq_x_mark time fea
     
     def __len__(self):
         return len(self.data_x) - self.seq_len- self.pred_len + 1

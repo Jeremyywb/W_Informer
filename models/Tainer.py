@@ -187,3 +187,4 @@ class torchModel(object):
     def predict(self,batch):
         raise NotImplementedError()
 
+

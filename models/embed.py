@@ -72,7 +72,7 @@ class TemporalEmbedding(nn.Module):
     def __init__(self, d_model, embed_type='fixed', freq='h'):
         super(TemporalEmbedding, self).__init__()
 
-        minute_size = 4; hour_size = 24
+        minute_size = 4; hour_size = 18
         weekday_size = 7; day_size = 32; month_size = 13
         # num tokens?
 
@@ -87,7 +87,7 @@ class TemporalEmbedding(nn.Module):
     def forward(self, x):
         x = x.long()
         
-        minute_x = self.minute_embed(x[:,:,4]) if hasattr(self, 'minute_embed') else 0.
+        # minute_x = self.minute_embed(x[:,:,4]) if hasattr(self, 'minute_embed') else 0.
         hour_x = self.hour_embed(x[:,:,3])
         weekday_x = self.weekday_embed(x[:,:,2])
         day_x = self.day_embed(x[:,:,1])
@@ -121,6 +121,26 @@ class DataEmbedding(nn.Module):
         # self.position_embedding(x) (bs, seq_len,d_model)
         
         return self.dropout(x)
+
+
+
+class CollEmbedding(nn.Module):
+    def __init__(self, token_dim, d_model, embed_type='fixed', freq='h', dropout=0.1):
+        super(CollEmbedding, self).__init__()
+
+        self.value_embedding = TokenEmbedding(c_in=token_dim, d_model=d_model)
+        self.position_embedding = PositionalEmbedding(d_model=d_model)#max_len?
+        self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=embed_type, freq=freq) if embed_type!='timeF' else TimeFeatureEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
+        self._station_embedding = nn.Embedding( 7, d_model )
+        self.dropout = nn.Dropout(p=dropout)
+
+    def forward(self, x, x_mark,x_station):
+        x = self.value_embedding(x) + self.position_embedding(x) + self.temporal_embedding(x_mark)
+        # self.position_embedding(x) (bs, seq_len,d_model)
+        x =  x + self._station_embedding(x_station)
+        return self.dropout(x)
+
+
 
 class CatesEmbedding(nn.Module):
     def __init__(

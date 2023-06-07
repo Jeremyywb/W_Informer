@@ -69,3 +69,57 @@ class AUCROC(Metric):
     ) -> float:
         return np.mean(metrics.roc_auc_score(y_true,y_score, average=None))
 
+
+
+def divide_no_nan(a, b):
+    """
+    Auxiliary funtion to handle divide by 0
+    """
+    div = a / b
+    div[div != div] = 0.0
+    div[div == float('inf')] = 0.0
+    return div
+
+
+class MULSMAPE(Metric):
+    """F1_score.
+    """
+    _NAME = "mulsmape"
+
+    def __init__(
+        self
+    ):
+        super(MULSMAPE, self).__init__()
+    def metric_fn(
+        self, 
+        y_true: np.ndarray, 
+        y_score: np.ndarray,
+        mask=None
+    ) -> float:
+        if mask is None:
+            mask = np.ones(y_score.shape)
+        delta_y = np.abs((y_true - y_score))
+        scale = np.abs(y_true) + np.abs(y_score)
+        smape = divide_no_nan(delta_y, scale)
+        smape = smape * mask
+        smape = 2 * np.mean(smape)
+        return 100 * np.mean(smap)
+
+
+class MAE(Metric):
+    """F1_score.
+    """
+    _NAME = "mae"
+
+    def __init__(
+        self
+    ):
+        super(MAE, self).__init__()
+    def metric_fn(
+        self, 
+        y_true: np.ndarray, 
+        y_score: np.ndarray,
+        mask=None
+    ) -> float:
+        mae = np.abs(y_true - y_score)
+        return np.mean(mae)

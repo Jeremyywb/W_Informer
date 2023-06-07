@@ -238,7 +238,7 @@ class Exp_Informer(Exp_Basic):
         self.model.eval()
         
         preds = []
-        
+        # batch_y==>seqlen==label len?where is predict len?
         for i, (batch_x,batch_y,batch_x_mark,batch_y_mark) in enumerate(pred_loader):
             pred, true = self._process_one_batch(
                 pred_data, batch_x, batch_y, batch_x_mark, batch_y_mark)
@@ -263,7 +263,7 @@ class Exp_Informer(Exp_Basic):
         batch_x_mark = batch_x_mark.float().to(self.device)
         batch_y_mark = batch_y_mark.float().to(self.device)
 
-        # decoder input
+        # decoder input mark with zero
         if self.args.padding==0:
             dec_inp = torch.zeros([batch_y.shape[0], self.args.pred_len, batch_y.shape[-1]]).float()
         elif self.args.padding==1:
@@ -288,77 +288,78 @@ class Exp_Informer(Exp_Basic):
 
         return outputs, batch_y
 
-SequenceClassifierOutput
+# SequenceClassifierOutput
 
-MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
-    [
-        # Model for Sequence Classification mapping
-        ("albert", "AlbertForSequenceClassification"),
-        ("bart", "BartForSequenceClassification"),
-        ("bert", "BertForSequenceClassification"),
-        ("big_bird", "BigBirdForSequenceClassification"),
-        ("bigbird_pegasus", "BigBirdPegasusForSequenceClassification"),
-        ("biogpt", "BioGptForSequenceClassification"),
-        ("bloom", "BloomForSequenceClassification"),
-        ("camembert", "CamembertForSequenceClassification"),
-        ("canine", "CanineForSequenceClassification"),
-        ("convbert", "ConvBertForSequenceClassification"),
-        ("ctrl", "CTRLForSequenceClassification"),
-        ("data2vec-text", "Data2VecTextForSequenceClassification"),
-        ("deberta", "DebertaForSequenceClassification"),
-        ("deberta-v2", "DebertaV2ForSequenceClassification"),
-        ("distilbert", "DistilBertForSequenceClassification"),
-        ("electra", "ElectraForSequenceClassification"),
-        ("ernie", "ErnieForSequenceClassification"),
-        ("ernie_m", "ErnieMForSequenceClassification"),
-        ("esm", "EsmForSequenceClassification"),
-        ("flaubert", "FlaubertForSequenceClassification"),
-        ("fnet", "FNetForSequenceClassification"),
-        ("funnel", "FunnelForSequenceClassification"),
-        ("gpt-sw3", "GPT2ForSequenceClassification"),
-        ("gpt2", "GPT2ForSequenceClassification"),
-        ("gpt_bigcode", "GPTBigCodeForSequenceClassification"),
-        ("gpt_neo", "GPTNeoForSequenceClassification"),
-        ("gpt_neox", "GPTNeoXForSequenceClassification"),
-        ("gptj", "GPTJForSequenceClassification"),
-        ("ibert", "IBertForSequenceClassification"),
-        ("layoutlm", "LayoutLMForSequenceClassification"),
-        ("layoutlmv2", "LayoutLMv2ForSequenceClassification"),
-        ("layoutlmv3", "LayoutLMv3ForSequenceClassification"),
-        ("led", "LEDForSequenceClassification"),
-        ("lilt", "LiltForSequenceClassification"),
-        ("llama", "LlamaForSequenceClassification"),
-        ("longformer", "LongformerForSequenceClassification"),
-        ("luke", "LukeForSequenceClassification"),
-        ("markuplm", "MarkupLMForSequenceClassification"),
-        ("mbart", "MBartForSequenceClassification"),
-        ("mega", "MegaForSequenceClassification"),
-        ("megatron-bert", "MegatronBertForSequenceClassification"),
-        ("mobilebert", "MobileBertForSequenceClassification"),
-        ("mpnet", "MPNetForSequenceClassification"),
-        ("mvp", "MvpForSequenceClassification"),
-        ("nezha", "NezhaForSequenceClassification"),
-        ("nystromformer", "NystromformerForSequenceClassification"),
-        ("open-llama", "OpenLlamaForSequenceClassification"),
-        ("openai-gpt", "OpenAIGPTForSequenceClassification"),
-        ("opt", "OPTForSequenceClassification"),
-        ("perceiver", "PerceiverForSequenceClassification"),
-        ("plbart", "PLBartForSequenceClassification"),
-        ("qdqbert", "QDQBertForSequenceClassification"),
-        ("reformer", "ReformerForSequenceClassification"),
-        ("rembert", "RemBertForSequenceClassification"),
-        ("roberta", "RobertaForSequenceClassification"),
-        ("roberta-prelayernorm", "RobertaPreLayerNormForSequenceClassification"),
-        ("roc_bert", "RoCBertForSequenceClassification"),
-        ("roformer", "RoFormerForSequenceClassification"),
-        ("squeezebert", "SqueezeBertForSequenceClassification"),
-        ("tapas", "TapasForSequenceClassification"),
-        ("transfo-xl", "TransfoXLForSequenceClassification"),
-        ("xlm", "XLMForSequenceClassification"),
-        ("xlm-roberta", "XLMRobertaForSequenceClassification"),
-        ("xlm-roberta-xl", "XLMRobertaXLForSequenceClassification"),
-        ("xlnet", "XLNetForSequenceClassification"),
-        ("xmod", "XmodForSequenceClassification"),
-        ("yoso", "YosoForSequenceClassification"),
-    ]
-)
+# MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+#     [
+#         # Model for Sequence Classification mapping
+#         ("albert", "AlbertForSequenceClassification"),
+#         ("bart", "BartForSequenceClassification"),
+#         ("bert", "BertForSequenceClassification"),
+#         ("big_bird", "BigBirdForSequenceClassification"),
+#         ("bigbird_pegasus", "BigBirdPegasusForSequenceClassification"),
+#         ("biogpt", "BioGptForSequenceClassification"),
+#         ("bloom", "BloomForSequenceClassification"),
+#         ("camembert", "CamembertForSequenceClassification"),
+#         ("canine", "CanineForSequenceClassification"),
+#         ("convbert", "ConvBertForSequenceClassification"),
+#         ("ctrl", "CTRLForSequenceClassification"),
+#         ("data2vec-text", "Data2VecTextForSequenceClassification"),
+#         ("deberta", "DebertaForSequenceClassification"),
+#         ("deberta-v2", "DebertaV2ForSequenceClassification"),
+#         ("distilbert", "DistilBertForSequenceClassification"),
+#         ("electra", "ElectraForSequenceClassification"),
+#         ("ernie", "ErnieForSequenceClassification"),
+#         ("ernie_m", "ErnieMForSequenceClassification"),
+#         ("esm", "EsmForSequenceClassification"),
+#         ("flaubert", "FlaubertForSequenceClassification"),
+#         ("fnet", "FNetForSequenceClassification"),
+#         ("funnel", "FunnelForSequenceClassification"),
+#         ("gpt-sw3", "GPT2ForSequenceClassification"),
+#         ("gpt2", "GPT2ForSequenceClassification"),
+#         ("gpt_bigcode", "GPTBigCodeForSequenceClassification"),
+#         ("gpt_neo", "GPTNeoForSequenceClassification"),
+#         ("gpt_neox", "GPTNeoXForSequenceClassification"),
+#         ("gptj", "GPTJForSequenceClassification"),
+#         ("ibert", "IBertForSequenceClassification"),
+#         ("layoutlm", "LayoutLMForSequenceClassification"),
+#         ("layoutlmv2", "LayoutLMv2ForSequenceClassification"),
+#         ("layoutlmv3", "LayoutLMv3ForSequenceClassification"),
+#         ("led", "LEDForSequenceClassification"),
+#         ("lilt", "LiltForSequenceClassification"),
+#         ("llama", "LlamaForSequenceClassification"),
+#         ("longformer", "LongformerForSequenceClassification"),
+#         ("luke", "LukeForSequenceClassification"),
+#         ("markuplm", "MarkupLMForSequenceClassification"),
+#         ("mbart", "MBartForSequenceClassification"),
+#         ("mega", "MegaForSequenceClassification"),
+#         ("megatron-bert", "MegatronBertForSequenceClassification"),
+#         ("mobilebert", "MobileBertForSequenceClassification"),
+#         ("mpnet", "MPNetForSequenceClassification"),
+#         ("mvp", "MvpForSequenceClassification"),
+#         ("nezha", "NezhaForSequenceClassification"),
+#         ("nystromformer", "NystromformerForSequenceClassification"),
+#         ("open-llama", "OpenLlamaForSequenceClassification"),
+#         ("openai-gpt", "OpenAIGPTForSequenceClassification"),
+#         ("opt", "OPTForSequenceClassification"),
+#         ("perceiver", "PerceiverForSequenceClassification"),
+#         ("plbart", "PLBartForSequenceClassification"),
+#         ("qdqbert", "QDQBertForSequenceClassification"),
+#         ("reformer", "ReformerForSequenceClassification"),
+#         ("rembert", "RemBertForSequenceClassification"),
+#         ("roberta", "RobertaForSequenceClassification"),
+#         ("roberta-prelayernorm", "RobertaPreLayerNormForSequenceClassification"),
+#         ("roc_bert", "RoCBertForSequenceClassification"),
+#         ("roformer", "RoFormerForSequenceClassification"),
+#         ("squeezebert", "SqueezeBertForSequenceClassification"),
+#         ("tapas", "TapasForSequenceClassification"),
+#         ("transfo-xl", "TransfoXLForSequenceClassification"),
+#         ("xlm", "XLMForSequenceClassification"),
+#         ("xlm-roberta", "XLMRobertaForSequenceClassification"),
+#         ("xlm-roberta-xl", "XLMRobertaXLForSequenceClassification"),
+#         ("xlnet", "XLNetForSequenceClassification"),
+#         ("xmod", "XmodForSequenceClassification"),
+#         ("yoso", "YosoForSequenceClassification"),
+#     ]
+# )
+
