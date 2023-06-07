@@ -103,7 +103,7 @@ class MULSMAPE(Metric):
         smape = divide_no_nan(delta_y, scale)
         smape = smape * mask
         smape = 2 * np.mean(smape)
-        return 100 * np.mean(smap)
+        return 100 * np.mean(smape)
 
 
 class MAE(Metric):

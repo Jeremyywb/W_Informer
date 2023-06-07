@@ -3,6 +3,8 @@
 
 import torch as t
 import torch.nn as nn
+import torch.nn.functional as F
+import math
 
 def divide_no_nan(a, b):
     """
@@ -89,43 +91,54 @@ def MSELoss(y_hat,y, mask=None):
     mse = t.mean(mse)
     return mse
 
-def SMAPELoss(y_hat,y, mask=None):
-    """SMAPE2 Loss
+# def SMAPELoss(y_hat,y, mask=None):
+#     """SMAPE2 Loss
 
-    Calculates Symmetric Mean Absolute Percentage Error.
-    SMAPE measures the relative prediction accuracy of a
-    forecasting method by calculating the relative deviation
-    of the prediction and the true value scaled by the sum of the
-    absolute values for the prediction and true value at a
-    given time, then averages these devations over the length
-    of the series. This allows the SMAPE to have bounds between
-    0% and 200% which is desireble compared to normal MAPE that
-    may be undetermined.
+#     Calculates Symmetric Mean Absolute Percentage Error.
+#     SMAPE measures the relative prediction accuracy of a
+#     forecasting method by calculating the relative deviation
+#     of the prediction and the true value scaled by the sum of the
+#     absolute values for the prediction and true value at a
+#     given time, then averages these devations over the length
+#     of the series. This allows the SMAPE to have bounds between
+#     0% and 200% which is desireble compared to normal MAPE that
+#     may be undetermined.
 
-    Parameters
-    ----------
-    y: tensor (batch_size, output_size)
-        actual values in torch tensor.
-    y_hat: tensor (batch_size, output_size)
-        predicted values in torch tensor.
+#     Parameters
+#     ----------
+#     y: tensor (batch_size, output_size)
+#         actual values in torch tensor.
+#     y_hat: tensor (batch_size, output_size)
+#         predicted values in torch tensor.
 
-    Returns
-    -------
-    smape:
-        symmetric mean absolute percentage error
+#     Returns
+#     -------
+#     smape:
+#         symmetric mean absolute percentage error
 
-    References
-    ----------
-    [1] https://robjhyndman.com/hyndsight/smape/ (Makridakis 1993)
-    """
-    if mask is None:
+#     References
+#     ----------
+#     [1] https://robjhyndman.com/hyndsight/smape/ (Makridakis 1993)
+#     """
+
+
+#     return smape*100
+
+
+
+class SMAPELoss(nn.Module):
+    def __init__(self):
+        super(SMAPELoss, self).__init__()
+
+    def forward(self, y_hat,y):
         mask = t.ones(y_hat.size())
-    delta_y = t.abs((y - y_hat))
-    scale = t.abs(y) + t.abs(y_hat)
-    smape = divide_no_nan(delta_y, scale)
-    smape = smape * mask
-    smape = 2 * t.mean(smape)
-    return smape*100
+        delta_y = t.abs((y - y_hat))
+        scale = t.abs(y) + t.abs(y_hat)
+        smape = divide_no_nan(delta_y, scale)
+        smape = smape * mask
+        smape = 2 * t.mean(smape)
+
+        return smape*100
 
 
 def MASELoss(y_hat,y, y_insample, seasonality, mask=None) :
