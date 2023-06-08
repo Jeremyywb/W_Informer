@@ -186,11 +186,13 @@ class InformerStackClf(nn.Module):
         e_layers=[3,2,1],
         attn='prob',
         mix=True,DEBUG=False,
+        prev_len_cut_to=128,
         device=torch.device('cuda')):
         super(InformerStackClf, self).__init__()
 
         # Encoding
         self.DEBUG = DEBUG
+        self.prev_len_cut_to = prev_len_cut_to
         self.DEBUGINFO = ''
         self._enc_embedding = CollectEmbedding(
                         token_dim,
@@ -285,10 +287,13 @@ class InformerStackClf(nn.Module):
         if x_prev is not None:
             if self.DEBUG:
                 print(f'''===============DEBUG STEP[PREV ENCODE]|===============''')
-            stp = x_prev.shape[1]//256
+            stp = x_prev.shape[1]//self.prev_len_cut_to
             for i in range(stp):         
                 xp = self._enc_embedding(
-                    [x_prev[:,i*256:(i+1)*256,:],x_cat_prev[:,i*256:(i+1)*256,:]]
+                        [
+                        x_prev[:,i*self.prev_len_cut_to:(i+1)*self.prev_len_cut_to,:],
+                        x_cat_prev[:,i*self.prev_len_cut_to:(i+1)*self.prev_len_cut_to,:]
+                        ]
                     )
                 oxptmp = None
                 xp = self._ontop_down_conv1D(xp)
