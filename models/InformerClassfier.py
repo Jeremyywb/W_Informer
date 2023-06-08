@@ -190,7 +190,8 @@ class InformerStackClf(nn.Module):
         super(InformerStackClf, self).__init__()
 
         # Encoding
-
+        self.DEBUG = DEBUG
+        self.DEBUGINFO = ''
         self._enc_embedding = CollectEmbedding(
                         token_dim,
                         token_emb_dim,
@@ -282,6 +283,8 @@ class InformerStackClf(nn.Module):
         x = self._ontop_down_conv1D(x)
         
         if x_prev is not None:
+            if self.DEBUG:
+                print(f'''===============DEBUG STEP[PREV ENCODE]|===============''')
             stp = x_prev.shape[1]//512
             for i in range(stp):         
                 xp = self._enc_embedding(
@@ -295,11 +298,20 @@ class InformerStackClf(nn.Module):
                     oxptmp ,_= self._encoder(xp, attn_mask=enc_self_mask)
                     oxp = oxp+oxptmp  #B L++,D?
             del _
+            if self.DEBUG:
+                print( f'''===============DEBUG STEP[PREV ATT]|===============''')
             new_x, attn = self._att_previous(
             x, oxp, oxp,
             attn_mask = None
              )
             x = x + self._dropout_prev(new_x)
+        if self.DEBUG:
+            print( f'''===============DEBUG STEP[CURR ENCODE]|===============''')
+        if x.shape[1]>256:
+            if self.DEBUG:
+                print( f'''DEBUG STEP[CURR MemContol]|===============''')
+                print( f'''DEBUG [INFO]|lenght seq input from {x.shape[1]} to {int((x.shape[1]-1)/2+1) }''')
+            x = self._ontop_down_conv1D(x)
         x, attns = self._encoder(x, attn_mask=enc_self_mask)
         del attns
         x_std = torch.std(x, dim=1)  # x(B,L,D)->(B,D) Std pooling
