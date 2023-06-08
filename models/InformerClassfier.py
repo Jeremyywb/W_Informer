@@ -285,10 +285,10 @@ class InformerStackClf(nn.Module):
         if x_prev is not None:
             if self.DEBUG:
                 print(f'''===============DEBUG STEP[PREV ENCODE]|===============''')
-            stp = x_prev.shape[1]//512
+            stp = x_prev.shape[1]//256
             for i in range(stp):         
                 xp = self._enc_embedding(
-                    [x_prev[:,i*512:(i+1)*512,:],x_cat_prev[:,i*512:(i+1)*512,:]]
+                    [x_prev[:,i*256:(i+1)*256,:],x_cat_prev[:,i*256:(i+1)*256,:]]
                     )
                 oxptmp = None
                 xp = self._ontop_down_conv1D(xp)
