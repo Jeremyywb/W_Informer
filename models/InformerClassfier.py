@@ -211,7 +211,8 @@ class InformerStackClf(nn.Module):
         attl_ ={
             "d_model":final_emb_dim, 
             "n_heads":n_heads, 
-            "mix":mix
+            "mix":mix,
+            'DEBUG':True
         }
         ecl_ = {
         'd_model':final_emb_dim, 
@@ -292,7 +293,7 @@ class InformerStackClf(nn.Module):
                     oxp, _ = self._encoder(xp, attn_mask=enc_self_mask)
                 else:
                     oxptmp ,_= self._encoder(xp, attn_mask=enc_self_mask)
-                    oxp = oxp+oxptmp
+                    oxp = oxp+oxptmp  #B L++,D?
             del _
             new_x, attn = self._att_previous(
             x, oxp, oxp,
