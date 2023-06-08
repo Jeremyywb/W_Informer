@@ -27,7 +27,7 @@ class InformerForecast(nn.Module):
         embed_type='fixed', freq='h', activation='gelu', 
         output_attention = False, distil=True, mix=True,
         device=torch.device('cuda')):
-        super(Informer, self).__init__()
+        super(InformerForecast, self).__init__()
         self.pred_len = out_len
         self.attn = attn
         self.output_attention = output_attention

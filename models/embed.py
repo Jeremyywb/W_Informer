@@ -93,7 +93,8 @@ class TemporalEmbedding(nn.Module):
         day_x = self.day_embed(x[:,:,1])
         month_x = self.month_embed(x[:,:,0])
         
-        return hour_x + weekday_x + day_x + month_x + minute_x
+        return hour_x + weekday_x + day_x + month_x 
+        # + minute_x
 
 class TimeFeatureEmbedding(nn.Module):
     def __init__(self, d_model, embed_type='timeF', freq='h'):
