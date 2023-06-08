@@ -185,7 +185,7 @@ class InformerStackClf(nn.Module):
         # n_e_l=3,
         e_layers=[3,2,1],
         attn='prob',
-        mix=True,
+        mix=True,DEBUG=False,
         device=torch.device('cuda')):
         super(InformerStackClf, self).__init__()
 
@@ -212,7 +212,7 @@ class InformerStackClf(nn.Module):
             "d_model":final_emb_dim, 
             "n_heads":n_heads, 
             "mix":mix,
-            'DEBUG':True
+            'DEBUG':DEBUG
         }
         ecl_ = {
         'd_model':final_emb_dim, 
