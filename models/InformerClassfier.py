@@ -187,6 +187,7 @@ class InformerStackClf(nn.Module):
         attn='prob',
         mix=True,DEBUG=False,
         prev_len_cut_to=128,
+        add_prev=True,
         device=torch.device('cuda')):
         super(InformerStackClf, self).__init__()
 
@@ -248,8 +249,20 @@ class InformerStackClf(nn.Module):
         # conv1d_seq_len = self.pooling_out_len(Lin=input_seq_len ,num_pool=1)
         # self.out_len_seq = self.pooling_out_len(Lin=conv1d_seq_len ,num_pool= n_e_l-1)
         # V2 del flatten /add mean/std polling
-        
-        self.mlps = nn.Sequential(
+        if add_prev:
+            self.mlps = nn.Sequential(
+                    # nn.Flatten(),
+                    # nn.Linear( self.out_len_seq*final_emb_dim,final_emb_dim ),
+                    nn.Linear( final_emb_dim*4,final_emb_dim ),#（256*2->256）
+                    nn.ReLU(),
+                    nn.Dropout(p=dropout),
+                    nn.Linear( final_emb_dim,128 ),
+                    nn.ReLU(),
+                    nn.Dropout(p=dropout),
+                    nn.Linear( 128,num_class )
+                    )
+        else:
+            self.mlps = nn.Sequential(
                     # nn.Flatten(),
                     # nn.Linear( self.out_len_seq*final_emb_dim,final_emb_dim ),
                     nn.Linear( final_emb_dim*2,final_emb_dim ),#（256*2->256）
@@ -302,26 +315,29 @@ class InformerStackClf(nn.Module):
                 else:
                     oxptmp ,_= self._encoder(xp, attn_mask=enc_self_mask)
                     oxp = oxp+oxptmp  #B L++,D?
-            del _
-            if self.DEBUG:
-                print( f'''===============DEBUG STEP[PREV ATT]|===============''')
-            new_x, attn = self._att_previous(
-            x, oxp, oxp,
-            attn_mask = None
-             )
-            x = x + self._dropout_prev(new_x)
-        if self.DEBUG:
-            print( f'''===============DEBUG STEP[CURR ENCODE]|===============''')
-        if x.shape[1]>256:
-            if self.DEBUG:
-                print( f'''DEBUG STEP[CURR MemContol]|===============''')
-                print( f'''DEBUG [INFO]|lenght seq input from {x.shape[1]} to {int((x.shape[1]-1)/2+1) }''')
-            x = self._ontop_down_conv1D(x)
+        #     del _
+        #     if self.DEBUG:
+        #         print( f'''===============DEBUG STEP[PREV ATT]|===============''')
+        #     new_x, attn = self._att_previous(
+        #     x, oxp, oxp,
+        #     attn_mask = None
+        #      )
+        #     x = x + self._dropout_prev(new_x)
+        # if self.DEBUG:
+        #     print( f'''===============DEBUG STEP[CURR ENCODE]|===============''')
+        # if x.shape[1]>256:
+        #     if self.DEBUG:
+        #         print( f'''DEBUG STEP[CURR MemContol]|===============''')
+        #         print( f'''DEBUG [INFO]|lenght seq input from {x.shape[1]} to {int((x.shape[1]-1)/2+1) }''')
+        #     x = self._ontop_down_conv1D(x)
         x, attns = self._encoder(x, attn_mask=enc_self_mask)
         del attns
         x_std = torch.std(x, dim=1)  # x(B,L,D)->(B,D) Std pooling
         x_mean = torch.mean(x, dim=1)  # Mean pooling
         score = torch.cat([x_std, x_mean], dim=1)
+        x_std = torch.std(oxp, dim=1)
+        x_mean = torch.mean(oxp, dim=1)
+        score  = torch.cat([score,x_std, x_mean], dim=1)
         score = self.mlps( score )
         score = F.sigmoid(score)
 
