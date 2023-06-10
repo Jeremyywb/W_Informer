@@ -217,31 +217,33 @@ class CollectEmbedding(nn.Module):
         super(CollectEmbedding, self).__init__()
 
         all_embed_dim = tot_cat_emb_dim + token_emb_dim
-        self._pos_emb = PositionalEmbedding(d_model= final_emb_dim)#max_len?
-        self._emb_list = nn.ModuleList( [ 
-            TokenEmbedding(c_in=token_dim, d_model=token_emb_dim),
-            CatesEmbedding(list_vocab_sizes = list_vocab_sizes,
+        self._pos_emb = PositionalEmbedding(d_model= token_emb_dim)#max_len?
+        # may be add is not a goog choice
+        # separate cats embedding with position embedding
+        self._tokenEmb = TokenEmbedding(c_in=token_dim, d_model=token_emb_dim)
+        self._catesEmb = CatesEmbedding(list_vocab_sizes = list_vocab_sizes,
                            list_embed_dims = list_embed_dims,
                            tot_cat_emb_dim  = tot_cat_emb_dim,
                                        # args... 
-                                       ) ] )
+                                       )
+        
+        # 
+        # self._emb_list = nn.ModuleList( [ 
+        #     TokenEmbedding(c_in=token_dim, d_model=token_emb_dim),
+        #     CatesEmbedding(list_vocab_sizes = list_vocab_sizes,
+        #                    list_embed_dims = list_embed_dims,
+        #                    tot_cat_emb_dim  = tot_cat_emb_dim,
+        #                                # args... 
+        #                                ) ] )
         
         # self._emb_dim_proj = nn.Sequential(
-        #             nn.Linear( all_embed_dim,all_embed_dim ),
+        #             nn.Linear( all_embed_dim,all_embed_dim*2 ),
         #             nn.ReLU(),
-        #             nn.Dropout(p=dropout),
-        #             nn.Linear( all_embed_dim,final_emb_dim ),
-        #             nn.Dropout(p=dropout)
-        #     )#commented
-
-        self._emb_dim_proj = nn.Sequential(
-                    nn.Linear( all_embed_dim,all_embed_dim*2 ),
-                    nn.ReLU(),
-                    # nn.Dropout(p=dropout),
-                    # nn.Linear( all_embed_dim,final_emb_dim ),
-                    nn.Linear( all_embed_dim*2,all_embed_dim ),
-                    # nn.Dropout(p=dropout)
-            )
+        #             # nn.Dropout(p=dropout),
+        #             # nn.Linear( all_embed_dim,final_emb_dim ),
+        #             nn.Linear( all_embed_dim*2,all_embed_dim ),
+        #             # nn.Dropout(p=dropout)
+        #     )
         
         self.dropout = nn.Dropout(p=dropout)
 
@@ -260,17 +262,24 @@ class CollectEmbedding(nn.Module):
             o(torch.Tensor): embedings output reciver->linear project of e + position embedding .
         """
         p = self._pos_emb(x[0] )
-        e = []
-        embstype = ['num','cat']
-        for n in range(2):
-            e_i = self._emb_list[n]( x[n] ) #(bs,seq,dim)
-            # print(f'*********emb.shape {embstype[n]} *********')
-            e.append( e_i )
-            # print(e_i.shape)
-        o = torch.cat(e, axis=2 )
+        # e = []
+        # embstype = ['num','cat']
+        to = self._tokenEmb( x[0] )
+        to = self.dropout( to + p )
+        ca = self._catesEmb( x[1] )
+        o = torch.cat( [ to,ca ] , axis=2 )
+        return o 
+
+        # for n in range(2):
+        #     e_i = self._emb_list[n]( x[n] ) #(bs,seq,dim)
+        #     # print(f'*********emb.shape {embstype[n]} *********')
+        #     e.append( e_i )
+        #     # print(e_i.shape)
+            
+        # o = torch.cat(e, axis=2 )
         # print('*********concat.shape*********')
         # print(o.shape)
-        o = self._emb_dim_proj( o )+o
-        o = self.dropout(o)
-        return o + p#(bs,seq,all_embed_dim)
+        # o = self._emb_dim_proj( o )+o
+        # o = self.dropout(o)
+        # return o + p#(bs,seq,all_embed_dim)
         

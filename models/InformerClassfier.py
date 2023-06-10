@@ -299,7 +299,7 @@ class InformerStackClf(nn.Module):
         
         if x_prev is not None:
             if self.DEBUG:
-                print(f'''===============DEBUG STEP[PREV ENCODE]|===============''')
+                print(f'''===============|DEBUG STEP[PREV ENCODE]|===============''')
             stp = x_prev.shape[1]//self.prev_len_cut_to
             for i in range(stp):         
                 xp = self._enc_embedding(
@@ -335,9 +335,11 @@ class InformerStackClf(nn.Module):
         x_std = torch.std(x, dim=1)  # x(B,L,D)->(B,D) Std pooling
         x_mean = torch.mean(x, dim=1)  # Mean pooling
         score = torch.cat([x_std, x_mean], dim=1)
-        x_std = torch.std(oxp, dim=1)
-        x_mean = torch.mean(oxp, dim=1)
-        score  = torch.cat([score,x_std, x_mean], dim=1)
+        if x_prev is not None::
+            x_std = torch.std(oxp, dim=1)
+            x_mean = torch.mean(oxp, dim=1)
+            score  = torch.cat([score,x_std, x_mean], dim=1)
+
         score = self.mlps( score )
         score = F.sigmoid(score)
 

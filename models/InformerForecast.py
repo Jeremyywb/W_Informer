@@ -90,7 +90,7 @@ class InformerForecast(nn.Module):
         ESx (sequence(float)): targets timeserise for encoder inputs 
         ETx (sequence(int))  : time feats for encoder inputs 
         ECx (sequence(int))  : station name as cate feas for encoder inputs
-        DSx (sequence(float)): targets timeserise for encoder inputs
+        DSx (sequence(float)): targets timeserise for encoder inputs with mark pred to zero
         DTx (sequence(int))  : time feats for encoder inputs
         DCx (sequence(int))  : station name as cate feas for encoder inputs  
 
