@@ -253,7 +253,7 @@ class InformerStackClf(nn.Module):
             self.mlps = nn.Sequential(
                     # nn.Flatten(),
                     # nn.Linear( self.out_len_seq*final_emb_dim,final_emb_dim ),
-                    nn.Linear( final_emb_dim*4,final_emb_dim ),#（256*2->256）
+                    nn.Linear( final_emb_dim*6,final_emb_dim ),#（256*2->256）
                     nn.ReLU(),
                     nn.Dropout(p=dropout),
                     nn.Linear( final_emb_dim,128 ),
@@ -265,7 +265,7 @@ class InformerStackClf(nn.Module):
             self.mlps = nn.Sequential(
                     # nn.Flatten(),
                     # nn.Linear( self.out_len_seq*final_emb_dim,final_emb_dim ),
-                    nn.Linear( final_emb_dim*2,final_emb_dim ),#（256*2->256）
+                    nn.Linear( final_emb_dim*3,final_emb_dim ),#（256*2->256）
                     nn.ReLU(),
                     nn.Dropout(p=dropout),
                     nn.Linear( final_emb_dim,128 ),
@@ -334,11 +334,13 @@ class InformerStackClf(nn.Module):
         del attns
         x_std = torch.std(x, dim=1)  # x(B,L,D)->(B,D) Std pooling
         x_mean = torch.mean(x, dim=1)  # Mean pooling
-        score = torch.cat([x_std, x_mean], dim=1)
+        x_max = torch.max(x, dim=1)
+        score = torch.cat([x_std, x_mean,x_max], dim=1)
         if x_prev is not None:
             x_std = torch.std(oxp, dim=1)
             x_mean = torch.mean(oxp, dim=1)
-            score  = torch.cat([score,x_std, x_mean], dim=1)
+            x_max = torch.max(oxp, dim=1)
+            score  = torch.cat([score,x_std, x_mean,x_max], dim=1)
 
         score = self.mlps( score )
         score = F.sigmoid(score)
