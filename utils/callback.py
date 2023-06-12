@@ -152,11 +152,11 @@ class History(object):
         if self._verbose == 0 or epoch % self._verbose != 0:
             return
 
-        msg = f"Epoch {epoch:0>3}/{self._epochs}\n{steps_per_epoch}/{steps_per_epoch}[===========================]"
+        msg = f"Epoch {epoch}/{self._epochs}\n{steps_per_epoch}/{steps_per_epoch} [=============================]"
         epoch_time_ms_s =  time.time()*1000 - self.epoch_time_start
         epoch_time_s    = int(epoch_time_ms_s/1000)
         epoch_time_ms   = int( epoch_time_ms_s/ steps_per_epoch)
-        msg = f" - {epoch_time_s}s {epoch_time_ms}ms/step - "
+        msg += f" - {epoch_time_s}s {epoch_time_ms}ms/step - "
         for metric_name, metric_value in self._epoch_metrics.items():
             if metric_name != "lr":
                 msg += f"{metric_name:<3}: {metric_value:.6f} - "

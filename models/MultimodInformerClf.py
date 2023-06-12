@@ -11,15 +11,17 @@ class CrossLayer(nn.Module):
         d_model, 
         d_ff=None,
         n_heads=6,
-        factor=5,
+        factor=35,#top 245|from 512-1024
         dropout=0.1, 
+        attType = 'full',
         activation="relu"
         ):
 
         super(CrossLayer, self).__init__()
         d_ff = d_ff or 4*d_model
+        ATT = FullAttention if attType=='full' else ProbAttention
         self._crossLayer = AttentionLayer(
-                                FullAttention(
+                                ATT(
                                     False, 
                                     factor, 
                                     attention_dropout=dropout, 
@@ -70,15 +72,15 @@ class CrossBlock(nn.Module):
                         crosses[0](x,y) + crosses[1](x,z)
                     )
             y1 = conv1s[1](
-                        crosses[2](x,y) + crosses[3](x,z)
+                        crosses[2](y,x) + crosses[3](y,z)
                     )
             z1 = conv1s[2](
-                        crosses[4](x,y) + crosses[5](x,z)
+                        crosses[4](z,x) + crosses[5](z,y)
                     )
         else:
             x1 = crosses[0](x,y) + crosses[1](x,z)
-            y1 = crosses[2](x,y) + crosses[3](x,z)
-            z1 = crosses[4](x,y) + crosses[5](x,z)           
+            y1 = crosses[2](y,x) + crosses[3](y,z)
+            z1 = crosses[4](z,x) + crosses[5](z,y)         
         return x1,y1,z1
     def forward(
         self,
@@ -237,10 +239,13 @@ class MultiMInformerClf(nn.Module):
                     nn.Linear( 128,numclass )
                     )
     def _pooling(self,x):
+        # print(f'DEBUG value [x]\n==========={x}')
+        # print(f'DEBUG shape [x]\n==========={x.shape}')
+        
         x_std = torch.std(x, dim=1)
         x_mean = torch.mean(x, dim=1)
         x_max = torch.max(x, dim=1).values
-        score  = torch.cat([score,x_std, x_mean,x_max], dim=1)
+        score  = torch.cat([x_std, x_mean,x_max], dim=1)
         return score
 
     def forward(self,x,y,z):
@@ -248,9 +253,9 @@ class MultiMInformerClf(nn.Module):
         y = self._embeddingY(y) #x_cat
         z = self._embeddingZ(z) #x_extro
         x,y,z = self._crossModalBlock(x,y,z)
-        x = self._selfAttentions[0](x)
-        y = self._selfAttentions[1](y)
-        z = self._selfAttentions[2](z)
+        x = self._selfAttentions[0](x)[0]
+        y = self._selfAttentions[1](y)[0]
+        z = self._selfAttentions[2](z)[0]
         _out = torch.cat(
             [self._pooling(x),self._pooling(y), self._pooling(z)], 
             dim=1)

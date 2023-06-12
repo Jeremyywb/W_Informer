@@ -124,7 +124,7 @@ class torchModel(object):
           'optimizer_state_dict': self._optimizer.state_dict(),
           'scheduler_state_dict': self._scheduler.state_dict()
             }
-        on_stop_sc =logs[ f'Valid {self._early_stopping.early_stopping_metric}']
+        on_stop_sc =logs[ f'{self._early_stopping.early_stopping_metric}']
 
         self._early_stopping( on_stop_sc, self._model ) 
         self._history._epoch_metrics.update(logs)
@@ -176,7 +176,7 @@ class torchModel(object):
             else:
                 y_pred1 = y_pred.numpy()
                 y_true1 = y_true.numpy()
-                if evname=='multifl':
+                if evname in ['multifl','aucroc']:
                     _score  = metric.metric_fn(y_true, y_pred)
                 else:
                     _score  = metric.metric_fn(y_true1, y_pred1)

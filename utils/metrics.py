@@ -2,6 +2,7 @@ from typing import Any, List, Tuple, Dict
 from abc import ABC, abstractmethod
 import sklearn.metrics as metrics
 from torchmetrics.classification import MultilabelF1Score
+from torchmetrics import AUROC
 import numpy as np
 import torch
 
@@ -91,11 +92,20 @@ class AUCROC(Metric):
         super(AUCROC, self).__init__()
     def metric_fn(
         self, 
-        y_true: np.ndarray, 
-        y_score: np.ndarray,
+        # y_true: np.ndarray, 
+        # y_pred: np.ndarray,
+        y_true: torch.Tensor, 
+        y_pred: torch.Tensor,
         **kwargs
     ) -> float:
-        return np.mean(metrics.roc_auc_score(y_true,y_score, average=None))
+        # return np.mean(metrics.roc_auc_score(y_true,y_score, average=None))
+
+        metric = AUROC(task="multilabel", num_labels=y_true.shape[1])
+        _ = metric(y_pred, y_true.int())
+        auroc = metric.compute().item()
+        metric.reset()
+
+        return auroc
 
 
 
