@@ -202,8 +202,8 @@ class MultiMInformerClf(nn.Module):
         self._crossModalBlock = CrossBlock(
                 # crossargs:check out examples in paras
                 # convargs:check out examples in paras
-                [CrossLayer(**cfg.crossargs) for i in range( numcross*3 ) ],
-                [ConvPoolLayer(**cfg.convargs) for i in range( numconv1 )],
+                [CrossLayer(**cfg.crossargs) for i in range( numcross*6 ) ],
+                [ConvPoolLayer(**cfg.convargs) for i in range( numconv1*3 )],
                 numcross,
                 numconv1
             )
