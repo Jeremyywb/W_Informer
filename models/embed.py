@@ -329,5 +329,5 @@ class ModalembProj(nn.Module):
             print('DEBUG Parameter [con1D]')
             print('[==============] - ',self._con1D.parameters)
         x = self._dropout(self._encode(x))#(bs,seq,embdim)
-        x = self._con1D(x)#(bs,seq,d_model)
-        return self._dropout2(x+self._pos_embed(x))
+        x = self._con1D(x.transpose(-1,1)).transpose(-1,1)+self._pos_embed(x)#(bs,seq,d_model)
+        return self._dropout2(x)
