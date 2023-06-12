@@ -86,7 +86,7 @@ class CrossBlock(nn.Module):
         y,
         z
         ):
-        for layer in self._numconv1:
+        for layer in range(self._numconv1):
             x,y,z = self._crossAtt( 
                         self._conv1List[layer*3:layer*3+3],
                         self._crossList[layer*3:layer*3+6],
