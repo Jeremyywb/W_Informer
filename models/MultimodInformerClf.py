@@ -10,8 +10,8 @@ class CrossLayer(nn.Module):
         self, 
         d_model, 
         d_ff=None,
-        n_heads,
-        factor,
+        n_heads=6,
+        factor=5,
         dropout=0.1, 
         activation="relu"
         ):
