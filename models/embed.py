@@ -186,6 +186,7 @@ class CatesEmbedding(nn.Module):
         return embeddings
 
 
+
 class CollectEmbedding(nn.Module):
     """Colect embedings before put into ecoder.
 
@@ -282,4 +283,36 @@ class CollectEmbedding(nn.Module):
         # o = self._emb_dim_proj( o )+o
         # o = self.dropout(o)
         # return o + p#(bs,seq,all_embed_dim)
-        
+     
+class ModalembProj(nn.Module):
+    def __init__(
+        self,
+        embedding,
+        embedim,
+        d_model,
+        max_len,
+        kernel_size=5
+        ):
+        super(ModalembProj, self).__init__()
+        self._embedding = embedding
+        self._encode  = nn.Sequential(
+                nn.Linear( embedim,   embedim*2 ),
+                nn.ReLU(),
+                nn.Linear( embedim*2, embedim  )
+                nn.ReLU(),
+            )
+        self._con1D = nn.Conv1d(
+                            in_channels=embedim, 
+                            out_channels=d_model, 
+                            kernel_size=kernel_size, 
+                            padding=padding, 
+                            padding_mode='circular'
+                            )
+        self._pos_embed = PositionalEmbedding(d_model=d_model,max_len=max_len)
+        self._dropout = nn.Dropout(0.1)
+        self._dropout2 = nn.Dropout(0.1)
+    def forward(self,x):
+        x = self._embedding(x)
+        x = self._dropout(self._encode(x))
+        x = self._con1D(x)+self._pos_embed(x)
+        return self._dropout2(x)

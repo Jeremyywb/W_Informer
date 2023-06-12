@@ -2,6 +2,32 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
+class ConvPoolLayer(nn.Module):
+    def __init__(self, d_model,kernel_size=3):
+        super(ConvLayer, self).__init__()
+        padding = 1 if torch.__version__>='1.5.0' else 2
+        self.downConv = nn.Conv1d(in_channels=d_model,
+                                  out_channels=d_model,
+                                  kernel_size=kernel_size,
+                                  padding=padding,
+                                  padding_mode='circular')
+        self.norm = nn.BatchNorm1d(d_model)
+        self.activation = nn.ELU()
+        self.maxPool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
+        # dilation ->default 1
+        # (L_in+2*padding-dilation*(kernel_size-1)-1)/2+1
+        # (L_in+2*1-1*(3-1)-1 )/2+1=(L_in-1)/2+1
+
+    def forward(self, x):
+        x = self.downConv(x.permute(0, 2, 1))
+        x = self.norm(x)
+        x = self.activation(x)
+        x = self.maxPool(x)
+        x = x.transpose(1,2)
+        return x
+
+
 class ConvLayer(nn.Module):
     def __init__(self, c_in):
         super(ConvLayer, self).__init__()

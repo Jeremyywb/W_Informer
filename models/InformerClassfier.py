@@ -334,12 +334,12 @@ class InformerStackClf(nn.Module):
         del attns
         x_std = torch.std(x, dim=1)  # x(B,L,D)->(B,D) Std pooling
         x_mean = torch.mean(x, dim=1)  # Mean pooling
-        x_max = torch.max(x, dim=1)
+        x_max = torch.max(x, dim=1).values
         score = torch.cat([x_std, x_mean,x_max], dim=1)
         if x_prev is not None:
             x_std = torch.std(oxp, dim=1)
             x_mean = torch.mean(oxp, dim=1)
-            x_max = torch.max(oxp, dim=1)
+            x_max = torch.max(oxp, dim=1).values
             score  = torch.cat([score,x_std, x_mean,x_max], dim=1)
 
         score = self.mlps( score )

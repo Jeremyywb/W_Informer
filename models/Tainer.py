@@ -74,13 +74,14 @@ class torchModel(object):
     ):
 
     # optim.Adam
+        self.steps_per_epoch = len(train)
         self._optimizer = self.optimizer(
                     self._model.parameters(),
                     lr=self._lr,
                     weight_decay=self._cfg.WEIGHT_DECAY)
         self._epochs = epochs
         self._scheduler = OneCycleLR(self._optimizer,max_lr = 1e-3, # Upper learning rate boundaries in the cycle for each parameter group
-                                steps_per_epoch = len(train), # The number of steps per epoch to train for.
+                                steps_per_epoch = self.steps_per_epoch, # The number of steps per epoch to train for.
                                 epochs = epochs, # The number of epochs to train for.
                                 anneal_strategy = 'cos') # 
         self._history = History(
@@ -127,7 +128,7 @@ class torchModel(object):
 
         self._early_stopping( on_stop_sc, self._model ) 
         self._history._epoch_metrics.update(logs)
-        self._history.on_epoch_end(state_dict,epoch,logs)
+        self._history.on_epoch_end(state_dict,epoch,self.steps_per_epoch,logs)
     def _train_epoch(self,train_loader):
         train_loss = []
         for batch_idx, batch in enumerate(train_loader):
@@ -171,12 +172,15 @@ class torchModel(object):
                     thres = float(o.split('@')[1])
                     y_pred1 = (y_pred.numpy().reshape(-1, ) > thres).astype("int")
                     _score  = metric.metric_fn(y_true1, y_pred1)
-                    eval_epoch_logs[f'Valid {o}'] = _score
+                    eval_epoch_logs[f'{o}'] = _score
             else:
                 y_pred1 = y_pred.numpy()
                 y_true1 = y_true.numpy()
-                _score  = metric.metric_fn(y_true1, y_pred1)
-                eval_epoch_logs[f'Valid {evname}'] = _score
+                if evname=='multifl':
+                    _score  = metric.metric_fn(y_true, y_pred)
+                else:
+                    _score  = metric.metric_fn(y_true1, y_pred1)
+                eval_epoch_logs[f'{evname}'] = _score
         del y_pred1,y_true1,y_pred,y_true
         _ = gc.collect()
         return eval_epoch_logs

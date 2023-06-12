@@ -1,8 +1,13 @@
 from typing import Any, List, Tuple, Dict
 from abc import ABC, abstractmethod
 import sklearn.metrics as metrics
+from torchmetrics.classification import MultilabelF1Score
 import numpy as np
+import torch
 
+
+    
+    
 class Metric(ABC):
     def __init__(self):
         pass
@@ -20,6 +25,29 @@ class Metric(ABC):
             metric = available_metrics[idx]()
             metrics.append(metric)
         return metrics
+
+    
+class MULTIF1(Metric):
+    """F1_score.
+    """
+    _NAME = "multifl"
+
+    def __init__(
+        self
+    ):
+        super(MULTIF1, self).__init__()
+    def metric_fn(
+        self, 
+        y_true: torch.Tensor, 
+        y_score: torch.Tensor,
+        # num_lables,
+        mask=None
+    ) -> float:
+        metric = MultilabelF1Score(num_labels=y_true.shape[1])
+        f1 = metric(y_score, y_true)
+        return f1
+    
+    
     
 class ACC(Metric):
     _NAME = "acc"
@@ -123,3 +151,5 @@ class MAE(Metric):
     ) -> float:
         mae = np.abs(y_true - y_score)
         return np.mean(mae)
+    
+    
