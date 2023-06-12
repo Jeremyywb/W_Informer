@@ -1,6 +1,6 @@
 from models.attn import FullAttention, ProbAttention, AttentionLayer
 from models.embed import CatesEmbedding,TokenEmbedding,ModalembProj
-from models.encoder import ConvLayer,ConvPoolLayer
+from models.encoder import ConvLayer,ConvPoolLayer,Encoder,EncoderLayer
 import torch.nn.functional as F
 import torch.nn as nn
 import torch
