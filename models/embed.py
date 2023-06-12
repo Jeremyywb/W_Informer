@@ -320,14 +320,14 @@ class ModalembProj(nn.Module):
         self._dropout2 = nn.Dropout(0.1)
     def forward(self,x):
         if self.DEBUG:
-            print('DEBUG shape [Input]\n[==============]')
-            print(' - ',x.shape)
+            print('DEBUG shape [Input]')
+            print('[==============] - ',x.shape)
         x = self._embedding(x)#(bs,seq,embdim)
         if self.DEBUG:
-            print('DEBUG shape [Embed]\n[==============]')
-            print(' - ',x.shape)
-            print('DEBUG Parameter [con1D]\n[==============]')
-            print(' - ',self._con1D.parameters)
+            print('DEBUG shape [Embed]')
+            print('[==============] - ',x.shape)
+            print('DEBUG Parameter [con1D]')
+            print('[==============] - ',self._con1D.parameters)
         x = self._dropout(self._encode(x))#(bs,seq,embdim)
-        x = self._con1D(x)+self._pos_embed(x)#(bs,seq,d_model)
-        return self._dropout2(x)
+        x = self._con1D(x)#(bs,seq,d_model)
+        return self._dropout2(x+self._pos_embed(x))
