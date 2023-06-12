@@ -244,9 +244,9 @@ class MultiMInformerClf(nn.Module):
         return score
 
     def forward(self,x,y,z):
-        x = self._embeddingX(x)
-        y = self._embeddingY(y)
-        z = self._embeddingZ(z)
+        x = self._embeddingX(x) #x
+        y = self._embeddingY(y) #x_cat
+        z = self._embeddingZ(z) #x_extro
         x,y,z = self._crossModalBlock(x,y,z)
         x = self._selfAttentions[0](x)
         y = self._selfAttentions[1](y)

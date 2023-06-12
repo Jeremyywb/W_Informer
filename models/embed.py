@@ -291,10 +291,15 @@ class ModalembProj(nn.Module):
         embedim,
         d_model,
         max_len,
-        kernel_size=5
+        DEBUG=False
+        # kernel_size=5
         ):
         super(ModalembProj, self).__init__()
+        self.DEBUG = DEBUG
         self._embedding = embedding
+        if self.DEBUG:
+            print('DEBUG Parameter [embedding]\n[==============]')
+            print(' - ',embedding.parameters)
         self._encode  = nn.Sequential(
                 nn.Linear( embedim,   embedim*2 ),
                 nn.ReLU(),
@@ -302,17 +307,27 @@ class ModalembProj(nn.Module):
                 nn.ReLU(),
             )
         self._con1D = nn.Conv1d(
+            # (in_channels=d_model, out_channels=d_ff, kernel_size=1
+            # projection part play role as linear kernel should be 1
                             in_channels=embedim, 
                             out_channels=d_model, 
-                            kernel_size=kernel_size, 
-                            padding=1, 
-                            padding_mode='circular'
+                            kernel_size=1, 
+                            # padding=1, 
+                            # padding_mode='circular'
                             )
         self._pos_embed = PositionalEmbedding(d_model=d_model,max_len=max_len)
         self._dropout = nn.Dropout(0.1)
         self._dropout2 = nn.Dropout(0.1)
     def forward(self,x):
-        x = self._embedding(x)
-        x = self._dropout(self._encode(x))
-        x = self._con1D(x)+self._pos_embed(x)
+        if self.DEBUG:
+            print('DEBUG shape [Input]\n[==============]')
+            print(' - ',x.shape)
+        x = self._embedding(x)#(bs,seq,embdim)
+        if self.DEBUG:
+            print('DEBUG shape [Embed]\n[==============]')
+            print(' - ',x.shape)
+            print('DEBUG Parameter [con1D]\n[==============]')
+            print(' - ',self._con1D.parameters)
+        x = self._dropout(self._encode(x))#(bs,seq,embdim)
+        x = self._con1D(x)+self._pos_embed(x)#(bs,seq,d_model)
         return self._dropout2(x)
