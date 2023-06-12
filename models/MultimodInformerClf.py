@@ -180,6 +180,7 @@ class MultiMInformerClf(nn.Module):
         self,
         numcross,
         numconv1,
+        numclass,
         cfg
         ):
         super(MultiMInformerClf, self).__init__()
@@ -233,7 +234,7 @@ class MultiMInformerClf(nn.Module):
                     nn.Linear( (cfg.d_model*9)//4,128 ),
                     nn.ReLU(),
                     nn.Dropout(cfg.global_dropout),
-                    nn.Linear( 128,num_class )
+                    nn.Linear( 128,numclass )
                     )
     def _pooling(self,x):
         x_std = torch.std(x, dim=1)
