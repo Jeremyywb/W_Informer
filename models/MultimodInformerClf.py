@@ -482,7 +482,7 @@ class CFG:
         self.modalZ = CFG.modalZ(self.modalZVocab, modalZtotdim)
         
 
-cfg = CFG()
-cfg.set_([ 1,2,3,4,5])
-cfg.CAT_FEATS
+# cfg = CFG()
+# cfg.set_([ 1,2,3,4,5])
+# cfg.CAT_FEATS
 # cfg
