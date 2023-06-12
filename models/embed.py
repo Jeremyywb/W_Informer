@@ -298,7 +298,7 @@ class ModalembProj(nn.Module):
         self._encode  = nn.Sequential(
                 nn.Linear( embedim,   embedim*2 ),
                 nn.ReLU(),
-                nn.Linear( embedim*2, embedim  )
+                nn.Linear( embedim*2, embedim  ),
                 nn.ReLU(),
             )
         self._con1D = nn.Conv1d(
