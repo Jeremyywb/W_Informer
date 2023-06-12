@@ -266,220 +266,220 @@ class MultiMInformerClf(nn.Module):
 
 
 
-class CFG:
-    '''========================================='''
-    #****************process*********
-    '''========================================='''
-    train = False
-    DEBUG = False
-    PREV_SEQ_CUT = 512
-    BackPre = True
-    prev_set = False
-    root     = '/kaggle/input/backpre/'
-#     root = '/content/gdrive/MyDrive/data/'
+# class CFG:
+#     '''========================================='''
+#     #****************process*********
+#     '''========================================='''
+#     train = False
+#     DEBUG = False
+#     PREV_SEQ_CUT = 512
+#     BackPre = True
+#     prev_set = False
+#     root     = '/kaggle/input/backpre/'
+# #     root = '/content/gdrive/MyDrive/data/'
     
-    Dpath    = root + 'TRAIN/'
-    CFG_path = root + 'CFG/'
-    '''========================DATA=Modal========================='''
-    # ==Data===modalx
-    NUM_FEATS = ["elapsed_time_diff"]
-    # ==Data===modaly--list_vocab_sizes--list_embed_dims
-    CAT_FEATS = ['event_name', #vocab_size 11
-                 'name', #vocab_size 6
-#                  'text',  #vocab_size 597
-                 'fqid',  #vocab_size 128
-#                  'room_fqid', #vocab_size 19
-#                  'text_fqid' #vocab_size 126
-                ]
-    modalYVocab = None #wait to be set
-    modalYembed_dims = [32,32, 64]
-    modalYtotdim = 128#32+32+64
-    # ==Data===modalz--list_vocab_sizes--list_embed_dims
-    EXTRO_CAT = ['room_coor_x',
-                 'room_coor_y',
-#                  'screen_coor_x',
-#                  'screen_coor_y'
-                ]
+#     Dpath    = root + 'TRAIN/'
+#     CFG_path = root + 'CFG/'
+#     '''========================DATA=Modal========================='''
+#     # ==Data===modalx
+#     NUM_FEATS = ["elapsed_time_diff"]
+#     # ==Data===modaly--list_vocab_sizes--list_embed_dims
+#     CAT_FEATS = ['event_name', #vocab_size 11
+#                  'name', #vocab_size 6
+# #                  'text',  #vocab_size 597
+#                  'fqid',  #vocab_size 128
+# #                  'room_fqid', #vocab_size 19
+# #                  'text_fqid' #vocab_size 126
+#                 ]
+#     modalYVocab = None #wait to be set
+#     modalYembed_dims = [32,32, 64]
+#     modalYtotdim = 128#32+32+64
+#     # ==Data===modalz--list_vocab_sizes--list_embed_dims
+#     EXTRO_CAT = ['room_coor_x',
+#                  'room_coor_y',
+# #                  'screen_coor_x',
+# #                  'screen_coor_y'
+#                 ]
 
     
-    modalZVocab = None
-    modalZembed_dims = [64,64]
-    modalZtotdim = 128 #64+64
-    coord_div=100
-    # (-20.0, 12.0)
-    # (-10.0, 5.0)
-    # (0.0, 19.0)
-    # (0.0, 14.0)
-#     EXTRO_CAT_CLIP = {'room_coor_x':[-100,62.0,62+100+1],
-#                      'room_coor_y':[-46, 27.0,62+100+1],
-#                      'screen_coor_x':[0,88,89],
-#                      'screen_coor_y':[0,65,66]}
+#     modalZVocab = None
+#     modalZembed_dims = [64,64]
+#     modalZtotdim = 128 #64+64
+#     coord_div=100
+#     # (-20.0, 12.0)
+#     # (-10.0, 5.0)
+#     # (0.0, 19.0)
+#     # (0.0, 14.0)
+# #     EXTRO_CAT_CLIP = {'room_coor_x':[-100,62.0,62+100+1],
+# #                      'room_coor_y':[-46, 27.0,62+100+1],
+# #                      'screen_coor_x':[0,88,89],
+# #                      'screen_coor_y':[0,65,66]}
     
-    EXTRO_CAT_CLIP = {'room_coor_x': [-20,   12,   20+12+1],
-                     'room_coor_y':  [-10.0, 5.0,  10+5+1],
-#                      'screen_coor_x':[0.0,   19.0, 20],
-#                      'screen_coor_y':[0.0,   14.0, 15]
-                     }
-    LIST_EMBED_DIMS = [ 32,32,
-#                        256,
-                       64,64,64,
-#                        128,128,128,128
-                       64,64
-#                        ,64,64
-                      ]
-    '''========================DATA=Modal=======↑=================='''
-#     COLS_TO_USE = ["session_id", "level", "level_group", "elapsed_time",
-#                    "event_name", "name", "room_fqid"]
-    CAT_FEATS_ALL = CAT_FEATS + EXTRO_CAT
-    COLS_TO_USE = ['session_id',
-#                  'index',
-                 'elapsed_time',
-                 'event_name', #%missing        0.000000
-                 'name', #%missing      0.000000
-#                  'level', 
-                 'room_coor_x',#%missing        0.078841
-                 'room_coor_y',#%missing        0.078841
-#                  'screen_coor_x',#%missing        0.078841
-#                  'screen_coor_y',#%missing        0.078841
-#                  'text',#%missing     0.634287
-                 'fqid',    #%missing       0.314653
-                 'room_fqid',#%missing      0.000000
-                 'text_fqid',#%missing      0.634283
-                 'level_group']
-    '''============================================='''
-    #****************models*********
-    '''============================================='''
-    d_model = 256
-    max_len = 512 #seq len
-    glb_kernel_size = 5
-    global_dropout = 0.2
-    num_class = 3
-#   CrossBlock  crossargs[dict]:attr of CFG class for CrossLayer para. examples
-    crossargs={'d_model':d_model, 
-            'd_ff':512,
-            'n_heads':4,
-            'factor':5,
-            'dropout':0.1, 
-            'activation':"relu"}
-#       CrossBlock  convargs[dict]:attr of CFG class for ConvLayer para. examples
-    convargs = {"d_model":256,"kernel_size":5}
-    class modalX:
-        token_dim = 1
-        token = {
-            "c_in": token_dim,
-            "d_model": CFG.d_model
-        }
-        Others = {
-                'embedim':128,
-                 "d_model": CFG.d_model,
-                'max_len': CFG.max_len,
-                'kernel_size':CFG.glb_kernel_size
-        }
+#     EXTRO_CAT_CLIP = {'room_coor_x': [-20,   12,   20+12+1],
+#                      'room_coor_y':  [-10.0, 5.0,  10+5+1],
+# #                      'screen_coor_x':[0.0,   19.0, 20],
+# #                      'screen_coor_y':[0.0,   14.0, 15]
+#                      }
+#     LIST_EMBED_DIMS = [ 32,32,
+# #                        256,
+#                        64,64,64,
+# #                        128,128,128,128
+#                        64,64
+# #                        ,64,64
+#                       ]
+#     '''========================DATA=Modal=======↑=================='''
+# #     COLS_TO_USE = ["session_id", "level", "level_group", "elapsed_time",
+# #                    "event_name", "name", "room_fqid"]
+#     CAT_FEATS_ALL = CAT_FEATS + EXTRO_CAT
+#     COLS_TO_USE = ['session_id',
+# #                  'index',
+#                  'elapsed_time',
+#                  'event_name', #%missing        0.000000
+#                  'name', #%missing      0.000000
+# #                  'level', 
+#                  'room_coor_x',#%missing        0.078841
+#                  'room_coor_y',#%missing        0.078841
+# #                  'screen_coor_x',#%missing        0.078841
+# #                  'screen_coor_y',#%missing        0.078841
+# #                  'text',#%missing     0.634287
+#                  'fqid',    #%missing       0.314653
+#                  'room_fqid',#%missing      0.000000
+#                  'text_fqid',#%missing      0.634283
+#                  'level_group']
+#     '''============================================='''
+#     #****************models*********
+#     '''============================================='''
+#     d_model = 256
+#     max_len = 512 #seq len
+#     glb_kernel_size = 5
+#     global_dropout = 0.2
+#     num_class = 3
+# #   CrossBlock  crossargs[dict]:attr of CFG class for CrossLayer para. examples
+#     crossargs={'d_model':d_model, 
+#             'd_ff':512,
+#             'n_heads':4,
+#             'factor':5,
+#             'dropout':0.1, 
+#             'activation':"relu"}
+# #       CrossBlock  convargs[dict]:attr of CFG class for ConvLayer para. examples
+#     convargs = {"d_model":256,"kernel_size":5}
+#     class modalX:
+#         token_dim = 1
+#         token = {
+#             "c_in": token_dim,
+#             "d_model": CFG.d_model
+#         }
+#         Others = {
+#                 'embedim':128,
+#                  "d_model": CFG.d_model,
+#                 'max_len': CFG.max_len,
+#                 'kernel_size':CFG.glb_kernel_size
+#         }
         
-    class modalY:
-        def __init__(self,modalYVocab,modalYtotdim):
-#         embedim = CFG.modalYtotdim
-            self.cates = {
-               "list_vocab_sizes" :modalYVocab,
-               'list_embed_dims' : CFG.modalYembed_dims,
-               'tot_cat_emb_dim'  : modalYtotdim,
-            }
-            self.Others = {
-                    'embedim':modalYtotdim,
-                     "d_model": CFG.d_model,
-                    'max_len': CFG.max_len,
-                    'kernel_size':CFG.glb_kernel_size
-        }
+#     class modalY:
+#         def __init__(self,modalYVocab,modalYtotdim):
+# #         embedim = CFG.modalYtotdim
+#             self.cates = {
+#                "list_vocab_sizes" :modalYVocab,
+#                'list_embed_dims' : CFG.modalYembed_dims,
+#                'tot_cat_emb_dim'  : modalYtotdim,
+#             }
+#             self.Others = {
+#                     'embedim':modalYtotdim,
+#                      "d_model": CFG.d_model,
+#                     'max_len': CFG.max_len,
+#                     'kernel_size':CFG.glb_kernel_size
+#         }
 
-    class modalZ:
-        def __init__(self,modalZVocab,modalZtotdim):
-#         embedim = CFG.modalZtotdim
-            self.cates = {
-                'list_vocab_sizes' : modalZVocab,
-               'list_embed_dims' : CFG.modalZembed_dims,
-               'tot_cat_emb_dim'  : modalZtotdim,
-            }
-            self.Others = {
-                    'embedim':modalZtotdim,
-                     "d_model": CFG.d_model,
-                    'max_len': CFG.max_len,
-                    'kernel_size':CFG.glb_kernel_size
-            }
+#     class modalZ:
+#         def __init__(self,modalZVocab,modalZtotdim):
+# #         embedim = CFG.modalZtotdim
+#             self.cates = {
+#                 'list_vocab_sizes' : modalZVocab,
+#                'list_embed_dims' : CFG.modalZembed_dims,
+#                'tot_cat_emb_dim'  : modalZtotdim,
+#             }
+#             self.Others = {
+#                     'embedim':modalZtotdim,
+#                      "d_model": CFG.d_model,
+#                     'max_len': CFG.max_len,
+#                     'kernel_size':CFG.glb_kernel_size
+#             }
         
         
-    class SelfATT:
-        probAtt = {
-         "mask_flag":False, 
-         "factor":5, 
-         "attention_dropout":0.2, 
-         "output_attention":False
-        }
-        attLayer ={
-            "d_model":CFG.d_model, 
-            "n_heads":6, 
-            "mix":True
-        }
-        encoderLayer = {
-        'd_model':CFG.d_model, 
-        'd_ff':CFG.d_model*2, 
-        'dropout':0.1,
-        'activation':'gelu'
-        }
-        numSelfAttLayer = 2
-        distil=True
-    '''============================================='''
-    #****************training*********
-    '''============================================='''   
-    SEED = 42
-    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
-    # "cuda:0"
-    EPOCH = 50
-    CKPT_METRIC = [
-#                     "f1@0.49","f1@0.53","f1@0.57",
-                   "f1@0.6","f1@0.63","f1@0.66",
-                   "f1@0.69","f1@0.73","f1@0.76",
-                   "f1@0.79","f1@0.83","f1@0.86"]
+#     class SelfATT:
+#         probAtt = {
+#          "mask_flag":False, 
+#          "factor":5, 
+#          "attention_dropout":0.2, 
+#          "output_attention":False
+#         }
+#         attLayer ={
+#             "d_model":CFG.d_model, 
+#             "n_heads":6, 
+#             "mix":True
+#         }
+#         encoderLayer = {
+#         'd_model':CFG.d_model, 
+#         'd_ff':CFG.d_model*2, 
+#         'dropout':0.1,
+#         'activation':'gelu'
+#         }
+#         numSelfAttLayer = 2
+#         distil=True
+#     '''============================================='''
+#     #****************training*********
+#     '''============================================='''   
+#     SEED = 42
+#     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
+#     # "cuda:0"
+#     EPOCH = 50
+#     CKPT_METRIC = [
+# #                     "f1@0.49","f1@0.53","f1@0.57",
+#                    "f1@0.6","f1@0.63","f1@0.66",
+#                    "f1@0.69","f1@0.73","f1@0.76",
+#                    "f1@0.79","f1@0.83","f1@0.86"]
 
-    # ==DataLoader==
-    BATCH_SIZE = 128
-    NUM_WORKERS: 4
+#     # ==DataLoader==
+#     BATCH_SIZE = 128
+#     NUM_WORKERS: 4
 
-    # ==Solver==
-    LR = 1e-3
-    WEIGHT_DECAY = 1e-4
+#     # ==Solver==
+#     LR = 1e-3
+#     WEIGHT_DECAY = 1e-4
 
-    # ==Early Stopping==
-    ES_PATIENCE = 5
+#     # ==Early Stopping==
+#     ES_PATIENCE = 5
 
-    # ==Evaluator==
-    EVAL_METRICS = ["auroc", "f1"]
-    def set_targets_seqlen(self,level_group):
-        PREV_DICT = {
-            "5-12":[["0-4"],512],
-            "13-22":[["0-4","5-12"], 512]#1024
-        }
-        self.level_curr = level_group
-        if level_group!='0-4':
-            self.prev_set=True
-            self.level_prev = PREV_DICT[level_group][0]
-            self.prev_seq_len = PREV_DICT[level_group][1]
-        f = lambda x:f'q{x}'
-        QNS_PER_LV_GP = {"0-4": list(map(f,list(range(1, 4)))),
-                 "5-12": list(map(f,list(range(4, 14)))), 
-                 "13-22": list(map(f,list(range(14, 19))))}
-        SEQ_LEN_DICT = {"0-4":512 ,
-                 "5-12": 800 ,
-                 "13-22": 1500}#1000
-        self.targets = QNS_PER_LV_GP[level_group]
-        self.seq_len = SEQ_LEN_DICT[level_group]
-        self.num_class = len(self.targets)
-    def set_(self,vocabs):
-        self.modalYVocab = vocabs[:len(self.CAT_FEATS)]
-        self.modalZVocab = vocabs[len(self.CAT_FEATS):]
-        modalYtotdim = sum(self.modalYembed_dims)
-        modalZtotdim = sum(self.modalZembed_dims)
-        self.modalY = CFG.modalY(self.modalYVocab, modalYtotdim)
-        self.modalZ = CFG.modalZ(self.modalZVocab, modalZtotdim)
+#     # ==Evaluator==
+#     EVAL_METRICS = ["auroc", "f1"]
+#     def set_targets_seqlen(self,level_group):
+#         PREV_DICT = {
+#             "5-12":[["0-4"],512],
+#             "13-22":[["0-4","5-12"], 512]#1024
+#         }
+#         self.level_curr = level_group
+#         if level_group!='0-4':
+#             self.prev_set=True
+#             self.level_prev = PREV_DICT[level_group][0]
+#             self.prev_seq_len = PREV_DICT[level_group][1]
+#         f = lambda x:f'q{x}'
+#         QNS_PER_LV_GP = {"0-4": list(map(f,list(range(1, 4)))),
+#                  "5-12": list(map(f,list(range(4, 14)))), 
+#                  "13-22": list(map(f,list(range(14, 19))))}
+#         SEQ_LEN_DICT = {"0-4":512 ,
+#                  "5-12": 800 ,
+#                  "13-22": 1500}#1000
+#         self.targets = QNS_PER_LV_GP[level_group]
+#         self.seq_len = SEQ_LEN_DICT[level_group]
+#         self.num_class = len(self.targets)
+#     def set_(self,vocabs):
+#         self.modalYVocab = vocabs[:len(self.CAT_FEATS)]
+#         self.modalZVocab = vocabs[len(self.CAT_FEATS):]
+#         modalYtotdim = sum(self.modalYembed_dims)
+#         modalZtotdim = sum(self.modalZembed_dims)
+#         self.modalY = CFG.modalY(self.modalYVocab, modalYtotdim)
+#         self.modalZ = CFG.modalZ(self.modalZVocab, modalZtotdim)
         
 
 # cfg = CFG()
