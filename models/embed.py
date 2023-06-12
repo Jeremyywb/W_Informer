@@ -305,7 +305,7 @@ class ModalembProj(nn.Module):
                             in_channels=embedim, 
                             out_channels=d_model, 
                             kernel_size=kernel_size, 
-                            padding=padding, 
+                            padding=1, 
                             padding_mode='circular'
                             )
         self._pos_embed = PositionalEmbedding(d_model=d_model,max_len=max_len)
