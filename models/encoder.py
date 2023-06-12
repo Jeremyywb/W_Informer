@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 class ConvPoolLayer(nn.Module):
     def __init__(self, d_model,kernel_size=3):
-        super(ConvLayer, self).__init__()
+        super(ConvPoolLayer, self).__init__()
         padding = 1 if torch.__version__>='1.5.0' else 2
         self.downConv = nn.Conv1d(in_channels=d_model,
                                   out_channels=d_model,
