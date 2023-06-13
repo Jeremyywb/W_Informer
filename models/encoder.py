@@ -3,10 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class ConvPoolLayer(nn.Module):
-    def __init__(self, d_model,kernel_size=3):
+    def __init__(self, c_in,d_model,kernel_size=3):
         super(ConvPoolLayer, self).__init__()
         padding = 1 if torch.__version__>='1.5.0' else 2
-        self.downConv = nn.Conv1d(in_channels=d_model,
+        self.downConv = nn.Conv1d(in_channels=c_in,
                                   out_channels=d_model,
                                   kernel_size=kernel_size,
                                   padding=padding,

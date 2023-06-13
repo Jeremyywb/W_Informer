@@ -302,13 +302,16 @@ class ModalembProj(nn.Module):
         if self.DEBUG:
             print('DEBUG Parameter [embedding]\n[==============]')
             print(' - ',embedding.parameters)
-        self._encode  = nn.Sequential(
-                nn.Linear( embedim,   embedim*2 ),
-                nn.ReLU(),
-                nn.Linear( embedim*2, embedim  ),
-                nn.ReLU(),
-            )
-        self._con1D = ConvPoolLayer( d_model,kernel_size )
+        # self._encode  = nn.Sequential(
+        #         nn.Linear( embedim,   embedim*2 ),
+        #         nn.ReLU(),
+        #         nn.Linear( embedim*2, embedim  ),
+        #         nn.ReLU(),
+        #     )
+
+        self._con1D = ConvPoolLayer(embedim ,d_model,kernel_size )
+        max_len = int((max_len+2- kernel_size+1-1)/2+1)
+
         # self._con1D = nn.Conv1d(
         #     # (in_channels=d_model, out_channels=d_ff, kernel_size=1
         #     # projection part play role as linear kernel should be 1
@@ -319,7 +322,7 @@ class ModalembProj(nn.Module):
         #                     # padding_mode='circular'
         #                     )
         self._pos_embed = PositionalEmbedding(d_model=d_model,max_len=max_len)
-        self._dropout = nn.Dropout(0.1)
+        # self._dropout = nn.Dropout(0.1)
         self._dropout2 = nn.Dropout(0.1)
     def forward(self,x):
         if self.DEBUG:
@@ -331,6 +334,6 @@ class ModalembProj(nn.Module):
             print('[==============] - ',x.shape)
             print('DEBUG Parameter [con1D]')
             print('[==============] - ',self._con1D.parameters)
-        x = self._dropout(self._encode(x))#(bs,seq,embdim)
+        # x = self._dropout(self._encode(x))#(bs,seq,embdim)
         x = self._con1D(x.transpose(-1,1)).transpose(-1,1)+self._pos_embed(x)#(bs,seq,d_model)
         return self._dropout2(x)
