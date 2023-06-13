@@ -215,28 +215,42 @@ class MultiMInformerClf(nn.Module):
                         [EncoderLayer( 
                             AttentionLayer(
                                 ProbAttention(**cfg.SelfATT.probAtt),
-                                    **cfg.SelfATT.attLayer
-                            ),**cfg.SelfATT.encoderLayer
+                                    **ARGattLayer
+                            ),**ARGencoderLayer
                             )
                          for o in range(cfg.SelfATT.numSelfAttLayer)  ],
-                        [ConvLayer(cfg.d_model) 
+                        [ConvLayer(dm) 
                          for l in range(cfg.SelfATT.numSelfAttLayer-1) ] if cfg.SelfATT.distil else None,
-                     norm_layer=torch.nn.LayerNorm(cfg.d_model) 
-                     ) for i in range(3)
+                     norm_layer=torch.nn.LayerNorm(dm) 
+                     ) for ARGattLayer,ARGencoderLayer,dm in zip(cfg.SelfATT.attLyrArgs,
+                                                                 cfg.SelfATT.enclyrArgs,
+                                                                [cfg.d_model,cfg.d_model*3]
+                                                                 )
+        # for i in range(3)
         ]
         self._selfAttentions = nn.ModuleList( encoders )
         # self._pooling
         self._projection = nn.Sequential(
-                    nn.Linear( cfg.d_model*9,(cfg.d_model*9)//2 ),#（256*9->256）
+                    # nn.Linear( cfg.d_model*9,(cfg.d_model*9)//2 ),#（256*9->256）
+                    # nn.ReLU(),
+                    # nn.Dropout(cfg.global_dropout),
+                    # nn.Linear( (cfg.d_model*9)//2 ,(cfg.d_model*9)//4 ),
+                    # nn.ReLU(),
+                    # nn.Dropout(cfg.global_dropout),
+                    # nn.Linear( (cfg.d_model*9)//4,128 ),
+                    # nn.ReLU(),
+                    # nn.Dropout(cfg.global_dropout),
+                    # nn.Linear( 128,numclass )
+                    nn.Linear( cfg.d_model*12,(cfg.d_model*12)//4 ),#（256*9->256）
                     nn.ReLU(),
                     nn.Dropout(cfg.global_dropout),
-                    nn.Linear( (cfg.d_model*9)//2 ,(cfg.d_model*9)//4 ),
+                    # nn.Linear( (cfg.d_model*9)//2 ,(cfg.d_model*9)//4 ),
+                    # nn.ReLU(),
+                    # nn.Dropout(cfg.global_dropout),
+                    nn.Linear( (cfg.d_model*12)//4,256 ),
                     nn.ReLU(),
                     nn.Dropout(cfg.global_dropout),
-                    nn.Linear( (cfg.d_model*9)//4,128 ),
-                    nn.ReLU(),
-                    nn.Dropout(cfg.global_dropout),
-                    nn.Linear( 128,numclass )
+                    nn.Linear( 256,numclass )
                     )
     def _pooling(self,x):
         # print(f'DEBUG value [x]\n==========={x}')
@@ -253,16 +267,20 @@ class MultiMInformerClf(nn.Module):
         y = self._embeddingY(y) #x_cat
         z = self._embeddingZ(z) #x_extro
         x,y,z = self._crossModalBlock(x,y,z)
-        x = self._selfAttentions[0](x)[0]
-        y = self._selfAttentions[1](y)[0]
-        z = self._selfAttentions[2](z)[0]
-        _out = torch.cat(
-            [self._pooling(x),self._pooling(y), self._pooling(z)], 
-            dim=1)
-        _out = self._projection(_out)
-        return  F.sigmoid(_out)
-
-
+        # o =  #bs seq dim
+        # c = #bs seq dim*3
+        # x = self._selfAttentions[0](x)[0]
+        # y = self._selfAttentions[1](y)[0]
+        # z = self._selfAttentions[2](z)[0]
+        x = torch.cat([
+            self._pooling(self._selfAttentions[0](x+y+z )[0]),
+            self._pooling(self._selfAttentions[1](torch.cat([ x,y,z],dim=-1 ))[0])], 
+            dim=1) #3*4 dim
+        # _out = torch.cat(
+        #     [self._pooling(x),self._pooling(y), self._pooling(z)], 
+        #     dim=1)
+        x = self._projection(x)
+        return  F.sigmoid(x)
 
 
 
