@@ -2,6 +2,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torch
 import math
+from models.encoder import ConvPoolLayer
 
 
 
@@ -291,6 +292,7 @@ class ModalembProj(nn.Module):
         embedim,
         d_model,
         max_len,
+        kernel_size,
         DEBUG=False
         # kernel_size=5
         ):
@@ -306,15 +308,16 @@ class ModalembProj(nn.Module):
                 nn.Linear( embedim*2, embedim  ),
                 nn.ReLU(),
             )
-        self._con1D = nn.Conv1d(
-            # (in_channels=d_model, out_channels=d_ff, kernel_size=1
-            # projection part play role as linear kernel should be 1
-                            in_channels=embedim, 
-                            out_channels=d_model, 
-                            kernel_size=1, 
-                            # padding=1, 
-                            # padding_mode='circular'
-                            )
+        self._con1D = ConvPoolLayer( d_model,kernel_size )
+        # self._con1D = nn.Conv1d(
+        #     # (in_channels=d_model, out_channels=d_ff, kernel_size=1
+        #     # projection part play role as linear kernel should be 1
+        #                     in_channels=embedim, 
+        #                     out_channels=d_model, 
+        #                     kernel_size=1, 
+        #                     # padding=1, 
+        #                     # padding_mode='circular'
+        #                     )
         self._pos_embed = PositionalEmbedding(d_model=d_model,max_len=max_len)
         self._dropout = nn.Dropout(0.1)
         self._dropout2 = nn.Dropout(0.1)

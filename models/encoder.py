@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 class ConvPoolLayer(nn.Module):
     def __init__(self, d_model,kernel_size=3):
         super(ConvPoolLayer, self).__init__()
@@ -14,7 +13,7 @@ class ConvPoolLayer(nn.Module):
                                   padding_mode='circular')
         self.norm = nn.BatchNorm1d(d_model)
         self.activation = nn.ELU()
-        self.maxPool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
+        self.maxPool = nn.MaxPool1d(kernel_size=kernel_size, stride=2, padding=1)
         # dilation ->default 1
         # (L_in+2*padding-dilation*(kernel_size-1)-1)/2+1
         # (L_in+2*1-1*(3-1)-1 )/2+1=(L_in-1)/2+1
