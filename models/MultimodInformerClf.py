@@ -188,16 +188,35 @@ class MultiMInformerClf(nn.Module):
         super(MultiMInformerClf, self).__init__()
         
 
+        # self._embeddingX = ModalembProj(
+        #     [TokenEmbedding( **cfg.modalX.token)],
+        #         **cfg.modalX.Others
+        #     ) 
+        # self._embeddingY = ModalembProj(
+        #     [CatesEmbedding(**cfg.modalY.cates)],
+        #         **cfg.modalY.Others
+        #     ) 
+        # self._embeddingZ = ModalembProj(
+        #     [CatesEmbedding(**cfg.modalZ.cates),
+        #     TokenEmbedding(**cfg.modalZ.token1),
+        #     TokenEmbedding(**cfg.modalZ.token2)
+        #     ],
+        #         **cfg.modalZ.Others
+        #     ) #V1
         self._embeddingX = ModalembProj(
-            TokenEmbedding( **cfg.modalX.token),
+            [TokenEmbedding( **cfg.modalX.token)],
                 **cfg.modalX.Others
             ) 
         self._embeddingY = ModalembProj(
-            CatesEmbedding(**cfg.modalY.cates),
+            [nn.Embedding(**args) for args in cfg.modalY.cates],
                 **cfg.modalY.Others
             ) 
         self._embeddingZ = ModalembProj(
-            CatesEmbedding(**cfg.modalZ.cates),
+            [
+            nn.Embedding(**args) for args in cfg.modalZ.cates
+            ] + [
+            TokenEmbedding(**args) for args in cfg.modalZ.tokens
+            ],
                 **cfg.modalZ.Others
             ) 
 
@@ -229,9 +248,15 @@ class MultiMInformerClf(nn.Module):
         # for i in range(3)
         ]
         self._selfAttentions = nn.ModuleList( encoders )
+        self._normAndAct0 =  nn.Sequential(
+            nn.BatchNorm1d(cfg.d_model * 9),
+            nn.ELU(),
+            nn.Dropout(0.3)
+        )
         self._normAndAct1 =  nn.Sequential(
             nn.BatchNorm1d(cfg.d_model * 9),
-            nn.ELU()
+            nn.ELU(),
+            nn.Dropout(0.3)
         )
         # self._pooling
         self._projection = nn.Sequential(
@@ -276,7 +301,7 @@ class MultiMInformerClf(nn.Module):
             self._pooling(z)], 
             dim=1) #dim*9
         x,y,z = self._crossModalBlock(x,y,z)
-
+        o = self._normAndAct0(o)
         o = o + torch.cat([
             self._pooling(x),
             self._pooling(y),

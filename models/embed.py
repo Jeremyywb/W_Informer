@@ -298,7 +298,8 @@ class ModalembProj(nn.Module):
         ):
         super(ModalembProj, self).__init__()
         self.DEBUG = DEBUG
-        self._embedding = embedding
+        self._embedding = nn.ModuleList(embedding)
+
         if self.DEBUG:
             print('DEBUG Parameter [embedding]\n[==============]')
             print(' - ',embedding.parameters)
@@ -328,12 +329,37 @@ class ModalembProj(nn.Module):
         if self.DEBUG:
             print('DEBUG shape [Input]')
             print('[==============] - ',x.shape)
-        x = self._embedding(x)#(bs,seq,embdim)
+        if len(self._embedding)>1:
+            embs = []
+            t = 0
+            for o,_emb in enumerate( self._embedding ):
+                embs.append( _emb( x[:,:,:o] ) )
+                t +=1
+
+            _o = sum( embs )
+            for o,e in enumerate( embs[:-1] ):
+                for e1 in  embs[o+1:]:
+                    _o += e*e1
+                    t += 1
+            _o = _o/t
+            #     self._embedding[0](x[:,:,:-2]),
+            #     self._embedding[1](x[:,:,-2]),
+            #     self._embedding[2](x[:,:,-1])],
+
+            # x = torch.cat([
+            #     self._embedding[0](x[:,:,:-2]),
+            #     self._embedding[1](x[:,:,-2]),
+            #     self._embedding[2](x[:,:,-1])],
+            #     dim = -1
+            #     ) #V1
+            
+        else:
+            _o = self._embedding[0](x)#(bs,seq,embdim)
         if self.DEBUG:
             print('DEBUG shape [Embed]')
             print('[==============] - ',x.shape)
             print('DEBUG Parameter [con1D]')
             print('[==============] - ',self._con1D.parameters)
         # x = self._dropout(self._encode(x))#(bs,seq,embdim)
-        x = self._con1D(x.transpose(-1,1)).transpose(-1,1)+self._pos_embed(x)#(bs,seq,d_model)
-        return self._dropout2(x)
+        _o = self._con1D(_o)+self._pos_embed(_o)#(bs,seq,d_model)
+        return self._dropout2(_o)

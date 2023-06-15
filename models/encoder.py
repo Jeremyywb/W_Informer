@@ -20,7 +20,7 @@ class ConvPoolLayer(nn.Module):
 
     def forward(self, x):
         x = self.downConv(x.permute(0, 2, 1))
-        x = self.norm(x)
+        x = self.norm(x)#不同的example 不同的feature 同一个dim做norm
         x = self.activation(x)
         x = self.maxPool(x)
         x = x.transpose(1,2)
@@ -45,7 +45,7 @@ class ConvLayer(nn.Module):
 
     def forward(self, x):
         x = self.downConv(x.permute(0, 2, 1))
-        x = self.norm(x)
+        x = self.norm(x) #permute后:不同的example 不同的dim 同一个fe
         x = self.activation(x)
         x = self.maxPool(x)
         x = x.transpose(1,2)

@@ -1,6 +1,6 @@
 from typing import List, Dict, Any, Callable, Optional, Tuple
 from typing import List, Dict, Any, Callable, Optional, Tuple, Union
-from torch.optim.lr_scheduler import ExponentialLR
+from torch.optim.lr_scheduler import ExponentialLR,CosineAnnealingWarmRestarts
 from torch.utils.data import Dataset, DataLoader
 from torch.optim.lr_scheduler import OneCycleLR
 from utils.callback import EarlyStopping
@@ -80,10 +80,14 @@ class torchModel(object):
                     lr=self._lr,
                     weight_decay=self._cfg.WEIGHT_DECAY)
         self._epochs = epochs
-        self._scheduler = OneCycleLR(self._optimizer,max_lr = 1e-3, # Upper learning rate boundaries in the cycle for each parameter group
-                                steps_per_epoch = self.steps_per_epoch, # The number of steps per epoch to train for.
-                                epochs = epochs, # The number of epochs to train for.
-                                anneal_strategy = 'cos') # 
+        self._scheduler = CosineAnnealingWarmRestarts(optimizer=self._optimizer, T_0=10, eta_min=1e-5, T_mult=1)
+        # OneCycleLR(self._optimizer,max_lr = 1e-3, # Upper learning rate boundaries in the cycle for each parameter group
+        #                         steps_per_epoch = self.steps_per_epoch, # The number of steps per epoch to train for.
+        #                         epochs = epochs, # The number of epochs to train for.
+        #                         anneal_strategy = 'cos') # 
+        
+        
+
         self._history = History(
                     logPath         = self._logPath,
                     logfile         = self._logfile,
@@ -99,11 +103,13 @@ class torchModel(object):
             
             self._model.train()
             self._on_epoch_begin(epoch)
-            epoch_logs = self._train_epoch(train)
+            epoch_logs = self._train_epoch(train,epoch)
 
             self._model.eval()
             eval_epoch_logs = self._eval_epoch(valid)
             epoch_logs.update( eval_epoch_logs )
+
+            
 
             self._on_epoch_end(epoch,epoch_logs)
             if self._early_stopping._early_stop:
@@ -129,8 +135,9 @@ class torchModel(object):
         self._early_stopping( on_stop_sc, self._model ) 
         self._history._epoch_metrics.update(logs)
         self._history.on_epoch_end(state_dict,epoch,self.steps_per_epoch,logs)
-    def _train_epoch(self,train_loader):
+    def _train_epoch(self,train_loader,epoch):
         train_loss = []
+        iters = len(dataloader)
         for batch_idx, batch in enumerate(train_loader):
             self._optimizer.zero_grad()
             output,y_true = self._process_one_batch(batch)
@@ -139,7 +146,8 @@ class torchModel(object):
   
             self._loss.backward()
             self._optimizer.step()
-            self._scheduler.step()
+            # self._scheduler.step()
+            self._scheduler.step(epoch + batch_idx / iters)
         train_loss = np.average(train_loss)
         epoch_logs = {"lr": self._scheduler.get_lr(),'Train Loss': train_loss}
         return epoch_logs
