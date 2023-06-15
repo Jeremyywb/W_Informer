@@ -137,7 +137,7 @@ class torchModel(object):
         self._history.on_epoch_end(state_dict,epoch,self.steps_per_epoch,logs)
     def _train_epoch(self,train_loader,epoch):
         train_loss = []
-        iters = len(dataloader)
+        iters = len(train_loader)
         for batch_idx, batch in enumerate(train_loader):
             self._optimizer.zero_grad()
             output,y_true = self._process_one_batch(batch)

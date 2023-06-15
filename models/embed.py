@@ -325,23 +325,23 @@ class ModalembProj(nn.Module):
         self._pos_embed = PositionalEmbedding(d_model=d_model,max_len=max_len)
         # self._dropout = nn.Dropout(0.1)
         self._dropout2 = nn.Dropout(0.1)
-    def forward(self,x):
+    def forward(self,x,x_time):
         if self.DEBUG:
             print('DEBUG shape [Input]')
             print('[==============] - ',x.shape)
         if len(self._embedding)>1:
-            embs = []
-            t = 0
-            for o,_emb in enumerate( self._embedding ):
-                embs.append( _emb( x[:,:,:o] ) )
-                t +=1
+            # embs = []
+            # t = 0
+            # for o,_emb in enumerate( self._embedding ):
+            #     embs.append( _emb( x[:,:,:o] ) )
+            #     t +=1
 
-            _o = sum( embs )
-            for o,e in enumerate( embs[:-1] ):
-                for e1 in  embs[o+1:]:
-                    _o += e*e1
-                    t += 1
-            _o = _o/t
+            # _o = sum( embs )
+            # for o,e in enumerate( embs[:-1] ):
+            #     for e1 in  embs[o+1:]:
+            #         _o += e*e1
+            #         t += 1
+            # _o = _o/t #V2
             #     self._embedding[0](x[:,:,:-2]),
             #     self._embedding[1](x[:,:,-2]),
             #     self._embedding[2](x[:,:,-1])],
@@ -352,14 +352,23 @@ class ModalembProj(nn.Module):
             #     self._embedding[2](x[:,:,-1])],
             #     dim = -1
             #     ) #V1
+            x = torch.cat([
+                self._embedding[0](x[0]),
+                self._embedding[1](x[1][:,:,0].unsqueeze(-1)  ),
+                self._embedding[2](x[1][:,:,1]).unsqueeze(-1) ],
+                dim = -1
+                ) #V3
+            x = x_time * x
+            
             
         else:
-            _o = self._embedding[0](x)#(bs,seq,embdim)
+            x = self._embedding[0](x)#(bs,seq,embdim)
+            x = x_time * x
         if self.DEBUG:
             print('DEBUG shape [Embed]')
             print('[==============] - ',x.shape)
             print('DEBUG Parameter [con1D]')
             print('[==============] - ',self._con1D.parameters)
         # x = self._dropout(self._encode(x))#(bs,seq,embdim)
-        _o = self._con1D(_o)+self._pos_embed(_o)#(bs,seq,d_model)
-        return self._dropout2(_o)
+        x = self._con1D(x)+self._pos_embed(x)#(bs,seq,d_model)
+        return self._dropout2(x)
