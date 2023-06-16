@@ -355,11 +355,10 @@ class ModalembProj(nn.Module):
             x = torch.cat([
                 self._embedding[0](x[0]),
                 self._embedding[1](x[1][:,:,0].unsqueeze(-1)  ),
-                self._embedding[2](x[1][:,:,1]).unsqueeze(-1) ],
+                self._embedding[2](x[1][:,:,1].unsqueeze(-1)) ],
                 dim = -1
                 ) #V3
             # x = x_time * x
-            
             
         else:
             x = self._embedding[0](x)#(bs,seq,embdim)
@@ -370,5 +369,6 @@ class ModalembProj(nn.Module):
             print('DEBUG Parameter [con1D]')
             print('[==============] - ',self._con1D.parameters)
         # x = self._dropout(self._encode(x))#(bs,seq,embdim)
-        x = self._con1D(x)+self._pos_embed(x)#(bs,seq,d_model)
+        x = self._con1D(x)
+        x = x + self._pos_embed(x)#(bs,seq,d_model)
         return self._dropout2(x)

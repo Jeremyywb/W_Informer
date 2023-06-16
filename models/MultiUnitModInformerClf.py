@@ -208,65 +208,28 @@ class MultiMInformerClf(nn.Module):
         ):
         super(MultiMInformerClf, self).__init__()
         
+        _EmbType = {
+            'TOKEN':TokenEmbedding,
+            'NNEMB':nn.Embedding
+            }
+        self._Embeddings = nn.ModuleList([
+            ModalembProj(
+                [_EmbType[EType](**EParas)],
+                    **EProjs
+                )
+                for EType,EParas,EProjs in cfg.EmbCfgs
+            ])
 
-        self._embeddingX = ModalembProj(
-            [TokenEmbedding( **cfg.modalX.token)],
-                **cfg.modalX.Others
-            ) 
-        self._embeddingY = ModalembProj(
-            [CatesEmbedding(**cfg.modalY.cates)],
-                **cfg.modalY.Others
-            ) 
-        self._embeddingZ = ModalembProj(
-            [CatesEmbedding(**cfg.modalZ.cates),
-            TokenEmbedding(**cfg.modalZ.token1),
-            TokenEmbedding(**cfg.modalZ.token2)
-            ],
-                **cfg.modalZ.Others
-            ) #V1
-        # self._embeddingX = ModalembProj(
-        #     [TokenEmbedding( **cfg.modalX.token)],
-        #         **cfg.modalX.Others
-        #     ) 
-        # self._embeddingY = ModalembProj(
-        #     [nn.Embedding(**args) for args in cfg.modalY.cates],
-        #         **cfg.modalY.Others
-        #     ) 
-        # self._embeddingZ = ModalembProj(
-        #     [
-        #     nn.Embedding(**args) for args in cfg.modalZ.cates
-        #     ] + [
-        #     TokenEmbedding(**args) for args in cfg.modalZ.tokens
-        #     ],
-        #         **cfg.modalZ.Others
-        #     ) #v2
-
-        # self._crossModalBlock = CrossBlock(
-        #         # crossargs:check out examples in paras
-        #         # convargs:check out examples in paras
-        #         [CrossLayer(**cfg.crossargs) for i in range( numcross*6 ) ],
-        #         [ConvPoolLayer(**cfg.convargs) for i in range( numconv1*3 )],
-        #         numcross,
-        #         numconv1
-        #     ) #v2
-        self._crossModalBlock = CrossBlock(
-                # crossargs:check out examples in paras
-                # convargs:check out examples in paras
-                [CrossLayer(**cfg.crossargs) for i in range( numcross*2) ],
-                [ConvPoolLayer(**cfg.convargs) for i in range( numconv1*2 )],
-                numcross,
-                numconv1
-            )
-        self._crossBlocks = nn.ModuleList([
+        self._CrossBlocks = nn.ModuleList([
             CrossBlock(
                 # crossargs:check out examples in paras
                 # convargs:check out examples in paras
                 [CrossLayer(**cfg.crossargs) for i in range( numcross*2) ],
                 [ConvPoolLayer(**cfg.convargs) for i in range( numconv1*2 )],
                 numcross,
-                numconv1) for i in range(3)
+                numconv1) for i in range( cfg.NumEmbCross )
         ])
-        
+        *********** to be continue ↑
 
         encoders = [Encoder(
                         [EncoderLayer( 
@@ -362,9 +325,9 @@ class MultiMInformerClf(nn.Module):
         y = self._selfAttentions[1]( y )[0]
         z = self._selfAttentions[2]( z )[0]
         # y1,z1 = self._crossModalBlock(y,z)
-        y1,z1 = self._crossBlocks[0](y,z)
-        x1,y1 = self._crossBlocks[1](x,y)
-        x1,z1 = self._crossBlocks[2](x,z)
+        y1,z1 = self._CrossBlocks[0](y,z)
+        x1,y1 = self._CrossBlocks[1](x,y)
+        x1,z1 = self._CrossBlocks[2](x,z)
 #         print('DEBUG value [cross]')
 #         print(y1)
         
@@ -374,7 +337,7 @@ class MultiMInformerClf(nn.Module):
         # print('DEBUG value [conv1d]')
         # print(y1)
         z1 = self._crossConv1Ds[2](z1)
-        # self._crossBlocks
+        # self._CrossBlocks
         # y1,z1 = self._crossModalBlock(y,z)
         x = self._selfAttentions[3]( x )[0]
         y = self._selfAttentions[4]( y )[0]
@@ -393,47 +356,3 @@ class MultiMInformerClf(nn.Module):
         o = self._pooling(o)
         o = self._projection(o)
         return  F.sigmoid(o)
-
-        
-        # y = o
-        # y = self.dropout(self.activation(self.conv1(y.transpose(-1,1))))
-        # y = self.dropout(self.conv2(y).transpose(-1,1))
-        # o = self.norm1(o+y)
-        # o = self._pooling(o)
-        # o = self._projection(o)
-        # return  F.sigmoid(o)
-
-
-
-
-
-
-        # o = torch.cat([
-        #     # self._pooling(x),
-        #     self._pooling(y),
-        #     self._pooling(z)], 
-        #     dim=1) #dim*6
-        # y,z = self._crossModalBlock(y,z)#
-        # o = self._normAndAct0(o)
-        # o = o + torch.cat([
-        #     # self._pooling(x),
-        #     self._pooling(y),
-        #     self._pooling(z)], 
-        #     dim=1)
-        # o = self._normAndAct1(o)
-
-        # # o =  #bs seq dim
-        # # c = #bs seq dim*3
-        # # x = self._selfAttentions[0](x)[0]
-        # # y = self._selfAttentions[1](y)[0]
-        # # z = self._selfAttentions[2](z)[0]
-        # o = torch.cat([o,
-        #     self._pooling(self._selfAttentions[0](y+z )[0]),
-        #     self._pooling(self._selfAttentions[1](torch.cat([ y,z],dim=-1 ))[0])], 
-        #     dim=1) #3*2+3+3*2=15 dim
-        # # _out = torch.cat(
-        # #     [self._pooling(x),self._pooling(y), self._pooling(z)], 
-        # #     dim=1)
-        # o = self._projection(o)
-        # return  F.sigmoid(o)
-
