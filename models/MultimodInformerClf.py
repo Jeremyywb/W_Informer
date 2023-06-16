@@ -84,7 +84,7 @@ class CrossBlock(nn.Module):
             # x1 = crosses[0](x,y) + crosses[1](x,z)
             # y1 = crosses[2](y,x) + crosses[3](y,z)
             # z1 = crosses[4](z,x) + crosses[5](z,y)         
-            x1 = crosses[0](y,z)
+            y1 = crosses[0](y,z)
             z1 = crosses[1](z,y)
         return y1,z1
 
@@ -103,7 +103,7 @@ class CrossBlock(nn.Module):
             #             x,y,z,
             #             True
             #             )
-            x,y,z = self._crossAtt( 
+            y,z = self._crossAtt( 
                         self._conv1List[layer*2:layer*2+2],
                         self._crossList[layer*2:layer*2+2],
                         y,z,
@@ -272,7 +272,7 @@ class MultiMInformerClf(nn.Module):
                      norm_layer=torch.nn.LayerNorm(dm) 
                      ) for ARGattLayer,ARGencoderLayer,dm in zip(cfg.SelfATT.attLyrArgs,
                                                                  cfg.SelfATT.enclyrArgs,
-                                                                [cfg.d_model,cfg.d_model*2]
+                                                                [cfg.d_model]*6
                                                                  )
         # for i in range(3)
         ]
@@ -287,6 +287,17 @@ class MultiMInformerClf(nn.Module):
             nn.ELU(),
             nn.Dropout(0.3)
         )
+
+
+
+        self.dropout = nn.Dropout(0.2)
+        self.conv1 = nn.Conv1d(in_channels=cfg.d_model*5, out_channels=cfg.d_model*20, kernel_size=1)
+        self.conv2 = nn.Conv1d(in_channels=cfg.d_model*20, out_channels=cfg.d_model*5, kernel_size=1)
+        self.norm1 = nn.LayerNorm(cfg.d_model*5)
+        self.activation = F.relu 
+
+
+
         # self._pooling
         self._projection = nn.Sequential(
                     # nn.Linear( cfg.d_model*9,(cfg.d_model*9)//2 ),#（256*9->256）
@@ -321,37 +332,57 @@ class MultiMInformerClf(nn.Module):
         return score
 
     def forward(self,x,y,z):
-        # x = self._embeddingX(x) #x
-        y = self._embeddingY(y,x) #x_cat
-        z = self._embeddingZ(z,x) #x_extro
-
-
-        o = torch.cat([
-            # self._pooling(x),
-            self._pooling(y),
-            self._pooling(z)], 
-            dim=1) #dim*6
-        y,z = self._crossModalBlock(y,z)#
-        o = self._normAndAct0(o)
-        o = o + torch.cat([
-            # self._pooling(x),
-            self._pooling(y),
-            self._pooling(z)], 
-            dim=1)
-        o = self._normAndAct1(o)
-
-        # o =  #bs seq dim
-        # c = #bs seq dim*3
-        # x = self._selfAttentions[0](x)[0]
-        # y = self._selfAttentions[1](y)[0]
-        # z = self._selfAttentions[2](z)[0]
-        o = torch.cat([o,
-            self._pooling(self._selfAttentions[0](y+z )[0]),
-            self._pooling(self._selfAttentions[1](torch.cat([ y,z],dim=-1 ))[0])], 
-            dim=1) #3*2+3+3*2=15 dim
-        # _out = torch.cat(
-        #     [self._pooling(x),self._pooling(y), self._pooling(z)], 
-        #     dim=1)
+        x = self._embeddingX(x) #x
+        y = self._embeddingY(y) #x_cat
+        z = self._embeddingZ(z) #x_extro
+        x = self._selfAttentions[0]( x )[0]
+        y = self._selfAttentions[1]( y )[0]
+        z = self._selfAttentions[2]( z )[0]
+        y1,z1 = self._crossModalBlock(y,z)
+        # y1,z1 = self._crossModalBlock(y,z)
+        x = self._selfAttentions[3]( x )[0]
+        y = self._selfAttentions[4]( y )[0]
+        z = self._selfAttentions[5]( z )[0]
+        o = torch.cat([x,y,z,y1,z1],dim=-1)
+        y = o
+        y = self.dropout(self.activation(self.conv1(y.transpose(-1,1))))
+        y = self.dropout(self.conv2(y).transpose(-1,1))
+        o = self.norm1(o+y)
+        o = self._pooling(o)
         o = self._projection(o)
         return  F.sigmoid(o)
+
+
+
+
+
+
+        # o = torch.cat([
+        #     # self._pooling(x),
+        #     self._pooling(y),
+        #     self._pooling(z)], 
+        #     dim=1) #dim*6
+        # y,z = self._crossModalBlock(y,z)#
+        # o = self._normAndAct0(o)
+        # o = o + torch.cat([
+        #     # self._pooling(x),
+        #     self._pooling(y),
+        #     self._pooling(z)], 
+        #     dim=1)
+        # o = self._normAndAct1(o)
+
+        # # o =  #bs seq dim
+        # # c = #bs seq dim*3
+        # # x = self._selfAttentions[0](x)[0]
+        # # y = self._selfAttentions[1](y)[0]
+        # # z = self._selfAttentions[2](z)[0]
+        # o = torch.cat([o,
+        #     self._pooling(self._selfAttentions[0](y+z )[0]),
+        #     self._pooling(self._selfAttentions[1](torch.cat([ y,z],dim=-1 ))[0])], 
+        #     dim=1) #3*2+3+3*2=15 dim
+        # # _out = torch.cat(
+        # #     [self._pooling(x),self._pooling(y), self._pooling(z)], 
+        # #     dim=1)
+        # o = self._projection(o)
+        # return  F.sigmoid(o)
 

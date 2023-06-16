@@ -325,7 +325,7 @@ class ModalembProj(nn.Module):
         self._pos_embed = PositionalEmbedding(d_model=d_model,max_len=max_len)
         # self._dropout = nn.Dropout(0.1)
         self._dropout2 = nn.Dropout(0.1)
-    def forward(self,x,x_time):
+    def forward(self,x):
         if self.DEBUG:
             print('DEBUG shape [Input]')
             print('[==============] - ',x.shape)
@@ -358,12 +358,12 @@ class ModalembProj(nn.Module):
                 self._embedding[2](x[1][:,:,1]).unsqueeze(-1) ],
                 dim = -1
                 ) #V3
-            x = x_time * x
+            # x = x_time * x
             
             
         else:
             x = self._embedding[0](x)#(bs,seq,embdim)
-            x = x_time * x
+            # x = x_time * x
         if self.DEBUG:
             print('DEBUG shape [Embed]')
             print('[==============] - ',x.shape)
