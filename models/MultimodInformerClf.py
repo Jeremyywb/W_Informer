@@ -1,5 +1,5 @@
 from models.attn import FullAttention, ProbAttention, AttentionLayer
-from models.embed import CatesEmbedding,TokenEmbedding,ModalembProj
+from models.embed import CatesEmbedding,TokenEmbedding,ModalembProj,TokenEmbAndNorm
 from models.encoder import ConvLayer,ConvPoolLayer,Encoder,EncoderLayer
 import torch.nn.functional as F
 import torch.nn as nn
@@ -288,15 +288,15 @@ class MultiMInformerClf(nn.Module):
                 [CrossLayer(**cfg.crossargs) for i in range( numcross*2) ],
                 [ConvPoolLayer(**cfg.convargs) for i in range( numconv1*2 )],
                 numcross,
-                numconv1) for i in range(3)
+                0) for i in range(3)
         ])
 
         encoders = [
             SelfAttBlock(
                 # crossargs:check out examples in paras
                 # convargs:check out examples in paras
-                [CrossLayer(**cfg.selfcross) for i in range( numcross) ],
-                [ConvPoolLayer(**cfg.selfconv) for i in range( numconv1 )],
+                [CrossLayer(**cfg.crossargs) for i in range( numcross) ],
+                [ConvPoolLayer(**cfg.convargs) for i in range( numconv1 )],
                 numcross,
                 numconv1) for i in range(6)
         ]
