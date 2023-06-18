@@ -19,9 +19,9 @@ class CrossLayer(nn.Module):
 
         super(CrossLayer, self).__init__()
         d_ff = d_ff or 4*d_model
-        ATT = FullAttention if attType=='full' else ProbAttention
+        # ATT = FullAttention if attType=='full' else ProbAttention
         self._crossLayer = AttentionLayer(
-                                ATT(
+                                FullAttention(
                                     False, 
                                     factor, 
                                     attention_dropout=dropout, 
@@ -40,16 +40,17 @@ class CrossLayer(nn.Module):
         self.activation = F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, cross, x_mask=None, cross_mask=None):
+        namask = torch.isnan(x)
         x = x + self.dropout(
                     self._crossLayer(
                         x, cross, cross,
                         attn_mask=cross_mask
                     )[0])
                     
-        y = x = self.norm1(x)
+        y = x = self.norm1(x.masked_fill(namask,0)).masked_fill(namask,torch.nan)
         y = self.dropout(self.activation(self.conv1(y.transpose(-1,1))))
         y = self.dropout(self.conv2(y).transpose(-1,1))
-        return self.norm2(x+y)
+        return self.norm2( (x+y).masked_fill(namask,0) ).masked_fill(namask,torch.nan)
 
 class CrossBlock(nn.Module):
     """docstring for CrossBlock"""
@@ -125,7 +126,29 @@ class CrossBlock(nn.Module):
         return y,z
         # return x,y,z
             
-
+class SelfAttBlock(nn.Module):
+    """docstring for SelfAttBlock"""
+    def __init__(
+        self, 
+        crosslayers,
+        conv1layers,
+        numcross,
+        numconv1,
+        ):
+        super(SelfAttBlock, self).__init__()
+        self._numcross = numcross
+        self._numconv1 = numconv1
+        self._crossList = nn.ModuleList(crosslayers)
+        self._conv1List = nn.ModuleList(conv1layers)
+    def forward(self,x):
+        for layer in range(self._numconv1):
+            x = self._conv1List[layer](
+                    self._crossList[layer](x,x)
+                    )
+        for layer in range(self._numconv1,self._numcross):
+            x =  self._crossList[layer](x,x)
+        return x
+        
 
 
 class MultiMInformerClf(nn.Module):
@@ -210,17 +233,18 @@ class MultiMInformerClf(nn.Module):
         
 
         self._embeddingX = ModalembProj(
-            [TokenEmbedding( **cfg.modalX.token)],
+            [TokenEmbAndNorm( **cfg.modalX.token)],
                 **cfg.modalX.Others
             ) 
+
         self._embeddingY = ModalembProj(
             [CatesEmbedding(**cfg.modalY.cates)],
                 **cfg.modalY.Others
             ) 
         self._embeddingZ = ModalembProj(
             [CatesEmbedding(**cfg.modalZ.cates),
-            TokenEmbedding(**cfg.modalZ.token1),
-            TokenEmbedding(**cfg.modalZ.token2)
+            TokenEmbAndNorm(**cfg.modalZ.token1),
+            TokenEmbAndNorm(**cfg.modalZ.token2)
             ],
                 **cfg.modalZ.Others
             ) #V1
@@ -249,14 +273,14 @@ class MultiMInformerClf(nn.Module):
         #         numcross,
         #         numconv1
         #     ) #v2
-        self._crossModalBlock = CrossBlock(
-                # crossargs:check out examples in paras
-                # convargs:check out examples in paras
-                [CrossLayer(**cfg.crossargs) for i in range( numcross*2) ],
-                [ConvPoolLayer(**cfg.convargs) for i in range( numconv1*2 )],
-                numcross,
-                numconv1
-            )
+        # self._crossModalBlock = CrossBlock(
+        #         # crossargs:check out examples in paras
+        #         # convargs:check out examples in paras
+        #         [CrossLayer(**cfg.crossargs) for i in range( numcross*2) ],
+        #         [ConvPoolLayer(**cfg.convargs) for i in range( numconv1*2 )],
+        #         numcross,
+        #         numconv1
+        #     ) #prev
         self._crossBlocks = nn.ModuleList([
             CrossBlock(
                 # crossargs:check out examples in paras
@@ -266,26 +290,38 @@ class MultiMInformerClf(nn.Module):
                 numcross,
                 numconv1) for i in range(3)
         ])
+
+        encoders = [
+            SelfAttBlock(
+                # crossargs:check out examples in paras
+                # convargs:check out examples in paras
+                [CrossLayer(**cfg.selfcross) for i in range( numcross) ],
+                [ConvPoolLayer(**cfg.selfconv) for i in range( numconv1 )],
+                numcross,
+                numconv1) for i in range(6)
+        ]
         
 
-        encoders = [Encoder(
-                        [EncoderLayer( 
-                            AttentionLayer(
-                                ProbAttention(**cfg.SelfATT.probAtt),
-                                    **ARGattLayer
-                            ),**ARGencoderLayer
-                            )
-                         for o in range(cfg.SelfATT.numSelfAttLayer)  ],
-                        [ConvLayer(dm,cfg.SelfATT.kernel_size) 
-                         for l in range(cfg.SelfATT.numSelfAttLayer-1) ] if cfg.SelfATT.distil else None,
-                     norm_layer=torch.nn.LayerNorm(dm) 
-                     ) for ARGattLayer,ARGencoderLayer,dm in zip(cfg.SelfATT.attLyrArgs,
-                                                                 cfg.SelfATT.enclyrArgs,
-                                                                [cfg.d_model]*6
-                                                                 )
-        # for i in range(3)
-        ]
+        # encoders = [Encoder(
+        #                 [EncoderLayer( 
+        #                     AttentionLayer(
+        #                         ProbAttention(**cfg.SelfATT.probAtt),
+        #                             **ARGattLayer
+        #                     ),**ARGencoderLayer
+        #                     )
+        #                  for o in range(cfg.SelfATT.numSelfAttLayer)  ],
+        #                 [ConvLayer(dm,cfg.SelfATT.kernel_size) 
+        #                  for l in range(cfg.SelfATT.numSelfAttLayer-1) ] if cfg.SelfATT.distil else None,
+        #              norm_layer=torch.nn.LayerNorm(dm) 
+        #              ) for ARGattLayer,ARGencoderLayer,dm in zip(cfg.SelfATT.attLyrArgs,
+        #                                                          cfg.SelfATT.enclyrArgs,
+        #                                                         [cfg.d_model]*6
+        #                                                          )
+        # # for i in range(3)
+        # ]
         self._selfAttentions = nn.ModuleList( encoders )
+
+
         self._normAndAct0 =  nn.Sequential(
             nn.BatchNorm1d(cfg.d_model * 6),
             nn.ELU(),
@@ -297,11 +333,11 @@ class MultiMInformerClf(nn.Module):
             nn.Dropout(0.3)
         )
 
-        self.dropout = nn.Dropout(0.2)
-        self.conv1 = nn.Conv1d(in_channels=cfg.d_model*6, out_channels=cfg.d_model*24, kernel_size=1)
-        self.conv2 = nn.Conv1d(in_channels=cfg.d_model*24, out_channels=cfg.d_model*6, kernel_size=1)
-        self.norm1 = nn.LayerNorm(cfg.d_model*6)
-        self.activation = F.relu 
+        # self.dropout = nn.Dropout(0.2)
+        # self.conv1 = nn.Conv1d(in_channels=cfg.d_model*6, out_channels=cfg.d_model*24, kernel_size=1)
+        # self.conv2 = nn.Conv1d(in_channels=cfg.d_model*24, out_channels=cfg.d_model*6, kernel_size=1)
+        # self.norm1 = nn.LayerNorm(cfg.d_model*6)
+        # self.activation = F.relu 
         
         
         self._crossConv1Ds = nn.ModuleList( ConvPoolLayer(**cfg.convargs) for i in range(3))
@@ -344,13 +380,19 @@ class MultiMInformerClf(nn.Module):
                     nn.Dropout(cfg.global_dropout),
                     nn.Linear( 256,numclass )
                     )
+    def nanstd(self,o,dim):
+        return torch.sqrt(
+                torch.nanmean(
+                    torch.pow( torch.abs(o-torch.nanmean(o,dim=1).unsqueeze(1)),2),
+                    dim=dim)
+                )
     def _pooling(self,x):
         # print(f'DEBUG value [x]\n==========={x}')
         # print(f'DEBUG shape [x]\n==========={x.shape}')
         
-        x_std = torch.std(x, dim=1)
-        x_mean = torch.mean(x, dim=1)
-        x_max = torch.max(x, dim=1).values
+        x_std = self.nanstd(x,1)
+        x_mean = torch.nanmean(x, dim=1)
+        x_max = torch.max(o.masked_fill( torch.isnan(x),-torch.inf ),dim=1).values
         score  = torch.cat([x_std, x_mean,x_max], dim=1)
         return score
 

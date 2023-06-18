@@ -29,13 +29,42 @@ class PositionalEmbedding(nn.Module):
         return self.pe[:, :x.size(1)]
 
 class TokenEmbedding(nn.Module):
+    def __init__(self, c_in, d_model,withMask=True):
+
+        super(TokenEmbedding, self).__init__()
+        padding = 1 if torch.__version__>='1.5.0' else 2
+        # c_in=target_dim = 1
+        self._withMask = withMask
+        self.tokenConv = nn.Conv1d(in_channels=c_in, out_channels=d_model, 
+                                    kernel_size=3, padding=padding, padding_mode='circular')
+        # (N,Cin,Lin) or (N,seqdim,seqlen)
+        for m in self.modules():
+            if isinstance(m, nn.Conv1d):
+                nn.init.kaiming_normal_(m.weight,mode='fan_in',nonlinearity='leaky_relu')
+                #参数可以自动初始化，但是这里自定义用kaiming
+    def forward(self, x):
+        # x->(batch,seq,dim)
+        if self._withMask:
+            mask = x==0
+        x = self.tokenConv(x.permute(0, 2, 1)).transpose(1,2) #(bs,seq,embdim )
+        if self._withMask:
+            x[mask] = 0
+            return x
+        # batch first
+        #seq_len=seq_len-kernel_size+1? False结果应该和stride有关 
+        # seq_len=seq_len-stride+1；True
+        return x
+class TokenEmbAndNorm(nn.Module):
     def __init__(self, c_in, d_model):
 
         super(TokenEmbedding, self).__init__()
         padding = 1 if torch.__version__>='1.5.0' else 2
         # c_in=target_dim = 1
         self.tokenConv = nn.Conv1d(in_channels=c_in, out_channels=d_model, 
-                                    kernel_size=3, padding=padding, padding_mode='circular')
+                                    kernel_size=3, padding=padding
+                                    # , padding_mode='circular'
+                                    )
+        self.norm = nn.LayerNorm(d_model)
         # (N,Cin,Lin) or (N,seqdim,seqlen)
         for m in self.modules():
             if isinstance(m, nn.Conv1d):
@@ -47,7 +76,9 @@ class TokenEmbedding(nn.Module):
         # batch first
         #seq_len=seq_len-kernel_size+1? False结果应该和stride有关 
         # seq_len=seq_len-stride+1；True
-        return x
+        return self.norm(
+                x.masked_fill(torch.isnan(x),0)
+                ).masked_fill(torch.isnan(x),torch.nan)
 
 class FixedEmbedding(nn.Module):
     def __init__(self, c_in, d_model):
@@ -170,11 +201,15 @@ class CatesEmbedding(nn.Module):
         
     def forward(self, x_cat):
         embeddings = []
+        nan_mask = torch.isnan(x_cat)[:,:,0]
         for i,emb_layer in enumerate(self._cat_emb_list):
-            o = emb_layer( x_cat[:,:,i] )
+            o = emb_layer( x_cat[:,:,i].masked_fill(nan_mask,0).to(torch.int32) )
             # print(o.shape)
             embeddings.append( o )
         embeddings = torch.cat(embeddings,axis=2 )
+        nan_mask = nan_mask.unsqueeze(-1).repeat(1,1, embeddings.shape[-1])
+        embeddings = embeddings.masked_fill(nan_mask,torch.nan)
+        del nan_mask
         # embeddings = torch.stack(embeddings, dim=2 )
         
         # print('*********before cat embs *********')
@@ -291,7 +326,7 @@ class ModalembProj(nn.Module):
         embedding,
         embedim,
         d_model,
-        max_len,
+        max_len,#max len in batch
         kernel_size,
         DEBUG=False
         # kernel_size=5

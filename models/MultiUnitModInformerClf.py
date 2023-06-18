@@ -236,7 +236,7 @@ class MultiMInformerClf(nn.Module):
                             AttentionLayer(
                                 ProbAttention(**cfg.SelfATT.probAtt),
                                     **ARGattLayer
-                            ),**ARGencoderLayer
+                                ),**ARGencoderLayer
                             )
                          for o in range(cfg.SelfATT.numSelfAttLayer)  ],
                         [ConvLayer(dm,cfg.SelfATT.kernel_size) 
@@ -307,18 +307,29 @@ class MultiMInformerClf(nn.Module):
                     nn.Dropout(cfg.global_dropout),
                     nn.Linear( 256,numclass )
                     )
+    def nanstd(self,o,dim):
+        return torch.sqrt(
+                torch.nanmean(
+                    torch.pow( torch.abs(o-torch.nanmean(o,dim=1).unsqueeze(1)),2),
+                    dim=dim)
+                )
     def _pooling(self,x):
         # print(f'DEBUG value [x]\n==========={x}')
         # print(f'DEBUG shape [x]\n==========={x.shape}')
         
-        x_std = torch.std(x, dim=1)
-        x_mean = torch.mean(x, dim=1)
-        x_max = torch.max(x, dim=1).values
+        x_std = self.nanstd(x,1)
+        x_mean = torch.nanmean(x, dim=1)
+        x_max = torch.max(o.masked_fill( torch.isnan(x),-torch.inf ),dim=1).values
         score  = torch.cat([x_std, x_mean,x_max], dim=1)
         return score
 
     def forward(self,x,y,z):
-        x = self._embeddingX(x) #x
+        # embdding ==>conv1d & Embedding
+        # seq -->pad -inf
+        # mask emb(Emb) input==>-inf==>0==>to(torch.int32)
+        # emb(Emb)==>mask repeat--embmask
+        # emb(conv1d)==>
+        x = self._embeddingX(x) #x  
         y = self._embeddingY(y) #x_cat
         z = self._embeddingZ(z) #x_extro
         x = self._selfAttentions[0]( x )[0]

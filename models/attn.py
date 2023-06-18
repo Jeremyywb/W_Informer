@@ -21,19 +21,22 @@ class FullAttention(nn.Module):
         scale = self.scale or 1./sqrt(E)
 
         scores = torch.einsum("blhe,bshe->bhls", queries, keys)
+        scores =  torch.nan_to_num(scores,-torch.inf )
         if self.mask_flag:
             if attn_mask is None:
                 attn_mask = TriangularCausalMask(B, L, device=queries.device)
 
             scores.masked_fill_(attn_mask.mask, -np.inf)
-
-        A = self.dropout(torch.softmax(scale * scores, dim=-1))
-        V = torch.einsum("bhls,bshd->blhd", A, values)
+        A = torch.softmax(scale * scores, dim=-1)
+        A = self.dropout( A )
+        # print(scores )
+        V = torch.einsum("bhls,bshd->blhd", torch.nan_to_num(A,0), torch.nan_to_num(values,0 ))
         
         if self.output_attention:
             return (V.contiguous(), A)
         else:
-            return (V.contiguous(), None)
+            return (V.contiguous(), scores)
+
 
 class ProbAttention(nn.Module):
     def __init__(self, mask_flag=True, factor=5, scale=None, attention_dropout=0.1, output_attention=False):
@@ -155,6 +158,55 @@ class AttentionLayer(nn.Module):
             self.DEBUGINFO += f"\nvalues.shape[B,S,D]:{values.shape}"
             print(self.DEBUGINFO)
         
+        queries = self.query_projection(queries).view(B, L, H, -1)
+        keys = self.key_projection(keys).view(B, S, H, -1)
+        values = self.value_projection(values).view(B, S, H, -1)
+
+        out, attn = self.inner_attention(
+            queries,
+            keys,
+            values,
+            attn_mask
+        )
+        if self.mix:
+            out = out.transpose(2,1).contiguous()
+        out = out.view(B, L, -1)
+
+        return self.out_projection(out), attn
+
+
+
+class AttLayerSeqMask(nn.Module):
+    def __init__(self, attention, d_model, n_heads, seqmask,
+                 d_keys=None, d_values=None, mix=False,DEBUG=False):
+        super(AttentionLayer, self).__init__()
+        self.DEBUG = DEBUG
+        self.DEBUGINFO = ''
+        d_keys = d_keys or (d_model//n_heads)
+        d_values = d_values or (d_model//n_heads)
+        self._seqmask = seqmask.unsqueeze(-1).repeat(1,1,d_keys * n_heads)
+
+        self.inner_attention = attention
+        self.query_projection = nn.Linear(d_model, d_keys * n_heads)
+        self.key_projection = nn.Linear(d_model, d_keys * n_heads)
+        self.value_projection = nn.Linear(d_model, d_values * n_heads)
+        self.out_projection = nn.Linear(d_values * n_heads, d_model)
+        self.n_heads = n_heads
+        self.mix = mix
+        if self.DEBUG:
+            self.DEBUGINFO += f'''\nAtt projection In:{d_model},Out:{d_keys * n_heads}'''
+
+    def forward(self, queries, keys, values, attn_mask):
+        B, L, _ = queries.shape
+        _, S, _ = keys.shape
+        H = self.n_heads
+        if self.DEBUG:
+            self.DEBUGINFO += '\nATTENTION STARTED|====================='
+            self.DEBUGINFO += f"\nqueries.shape[B,L,D]:{queries.shape}"
+            self.DEBUGINFO += f"\nkeys.shape[B,S,D]:{keys.shape}"
+            self.DEBUGINFO += f"\nvalues.shape[B,S,D]:{values.shape}"
+            print(self.DEBUGINFO)
+
         queries = self.query_projection(queries).view(B, L, H, -1)
         keys = self.key_projection(keys).view(B, S, H, -1)
         values = self.value_projection(values).view(B, S, H, -1)
