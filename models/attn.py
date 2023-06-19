@@ -21,7 +21,7 @@ class FullAttention(nn.Module):
         scale = self.scale or 1./sqrt(E)
 
         scores = torch.einsum("blhe,bshe->bhls", queries, keys)
-        scores =  torch.nan_to_num(scores,-torch.inf )
+        # scores =  torch.nan_to_num(scores,-torch.inf )
         if self.mask_flag:
             if attn_mask is None:
                 attn_mask = TriangularCausalMask(B, L, device=queries.device)

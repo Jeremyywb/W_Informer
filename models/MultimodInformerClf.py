@@ -40,17 +40,19 @@ class CrossLayer(nn.Module):
         self.activation = F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, cross, x_mask=None, cross_mask=None):
-        namask = torch.isnan(x)
+        # namask = torch.isnan(x)
         x = x + self.dropout(
                     self._crossLayer(
                         x, cross, cross,
                         attn_mask=cross_mask
                     )[0])
                     
-        y = x = self.norm1(x.masked_fill(namask,0)).masked_fill(namask,torch.nan)
+        y = x = self.norm1(x)
+            # .masked_fill(namask,0)).masked_fill(namask,torch.nan)
         y = self.dropout(self.activation(self.conv1(y.transpose(-1,1))))
         y = self.dropout(self.conv2(y).transpose(-1,1))
-        return self.norm2( (x+y).masked_fill(namask,0) ).masked_fill(namask,torch.nan)
+        return self.norm2( (x+y))
+            # .masked_fill(namask,0) ).masked_fill(namask,torch.nan)
 
 class CrossBlock(nn.Module):
     """docstring for CrossBlock"""
@@ -233,7 +235,7 @@ class MultiMInformerClf(nn.Module):
         
 
         self._embeddingX = ModalembProj(
-            [TokenEmbAndNorm( **cfg.modalX.token)],
+            [TokenEmbedding( **cfg.modalX.token)],
                 **cfg.modalX.Others
             ) 
 
@@ -243,8 +245,8 @@ class MultiMInformerClf(nn.Module):
             ) 
         self._embeddingZ = ModalembProj(
             [CatesEmbedding(**cfg.modalZ.cates),
-            TokenEmbAndNorm(**cfg.modalZ.token1),
-            TokenEmbAndNorm(**cfg.modalZ.token2)
+            TokenEmbedding(**cfg.modalZ.token1),
+            TokenEmbedding(**cfg.modalZ.token2)
             ],
                 **cfg.modalZ.Others
             ) #V1
@@ -390,9 +392,11 @@ class MultiMInformerClf(nn.Module):
         # print(f'DEBUG value [x]\n==========={x}')
         # print(f'DEBUG shape [x]\n==========={x.shape}')
         
-        x_std = self.nanstd(x,1)
+        # x_std = self.nanstd(x,1)
+        x_std = torch.std(x,dim=1)
         x_mean = torch.nanmean(x, dim=1)
-        x_max = torch.max(o.masked_fill( torch.isnan(x),-torch.inf ),dim=1).values
+        # x_max = torch.max(o.masked_fill( torch.isnan(x),-torch.inf ),dim=1).values
+        x_max = torch.max(x,dim=1).values
         score  = torch.cat([x_std, x_mean,x_max], dim=1)
         return score
 
@@ -400,9 +404,9 @@ class MultiMInformerClf(nn.Module):
         x = self._embeddingX(x) #x
         y = self._embeddingY(y) #x_cat
         z = self._embeddingZ(z) #x_extro
-        x = self._selfAttentions[0]( x )[0]
-        y = self._selfAttentions[1]( y )[0]
-        z = self._selfAttentions[2]( z )[0]
+        x = self._selfAttentions[0]( x )#[0]
+        y = self._selfAttentions[1]( y )#[0]
+        z = self._selfAttentions[2]( z )#[0]
         # y1,z1 = self._crossModalBlock(y,z)
         y1,z1 = self._crossBlocks[0](y,z)
         x1,y1 = self._crossBlocks[1](x,y)
@@ -418,9 +422,9 @@ class MultiMInformerClf(nn.Module):
         z1 = self._crossConv1Ds[2](z1)
         # self._crossBlocks
         # y1,z1 = self._crossModalBlock(y,z)
-        x = self._selfAttentions[3]( x )[0]
-        y = self._selfAttentions[4]( y )[0]
-        z = self._selfAttentions[5]( z )[0]
+        x = self._selfAttentions[3]( x )#[0]
+        y = self._selfAttentions[4]( y )#[0]
+        z = self._selfAttentions[5]( z )#[0]
 
         o = torch.cat([
             x.reshape( ( x.shape[0],-1) ).unsqueeze(-1),

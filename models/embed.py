@@ -44,12 +44,12 @@ class TokenEmbedding(nn.Module):
                 #参数可以自动初始化，但是这里自定义用kaiming
     def forward(self, x):
         # x->(batch,seq,dim)
-        if self._withMask:
-            mask = x==0
+        # if self._withMask:
+        #     mask = x==0
         x = self.tokenConv(x.permute(0, 2, 1)).transpose(1,2) #(bs,seq,embdim )
-        if self._withMask:
-            x[mask] = 0
-            return x
+        # if self._withMask:
+        #     x[mask] = 0
+        #     return x
         # batch first
         #seq_len=seq_len-kernel_size+1? False结果应该和stride有关 
         # seq_len=seq_len-stride+1；True
@@ -201,15 +201,16 @@ class CatesEmbedding(nn.Module):
         
     def forward(self, x_cat):
         embeddings = []
-        nan_mask = torch.isnan(x_cat)[:,:,0]
+        # nan_mask = torch.isnan(x_cat)[:,:,0]
         for i,emb_layer in enumerate(self._cat_emb_list):
-            o = emb_layer( x_cat[:,:,i].masked_fill(nan_mask,0).to(torch.int32) )
+            o = emb_layer( x_cat[:,:,i])
+                # .masked_fill(nan_mask,0).to(torch.int32) )
             # print(o.shape)
             embeddings.append( o )
         embeddings = torch.cat(embeddings,axis=2 )
-        nan_mask = nan_mask.unsqueeze(-1).repeat(1,1, embeddings.shape[-1])
-        embeddings = embeddings.masked_fill(nan_mask,torch.nan)
-        del nan_mask
+        # nan_mask = nan_mask.unsqueeze(-1).repeat(1,1, embeddings.shape[-1])
+        # embeddings = embeddings.masked_fill(nan_mask,torch.nan)
+        # del nan_mask
         # embeddings = torch.stack(embeddings, dim=2 )
         
         # print('*********before cat embs *********')

@@ -13,7 +13,7 @@ class ConvPoolLayer(nn.Module):
         self.norm = nn.BatchNorm1d(d_model)
         self.activation = nn.ELU()
         self.maxPool = nn.MaxPool1d(kernel_size=kernel_size, stride=2, padding=1)
-        self.norm2 = nn.LayerNorm(d_model)
+        # self.norm2 = nn.LayerNorm(d_model)
         # dilation ->default 1
         # (L_in+2*padding-dilation*(kernel_size-1)-1)/2+1
         # (L_in+2*1-1*(3-1)-1 )/2+1=(L_in-1)/2+1
@@ -21,22 +21,22 @@ class ConvPoolLayer(nn.Module):
     def forward(self, x):
 
         x= self.downConv(x.permute(0, 2, 1))
-        namask =torch.isnan(x)
-        x = self.activation(self.norm(x.masked_fill(namask,0)))
-        x = self.maxPool(x.masked_fill(namask,torch.nan) )
+        # namask =torch.isnan(x)
+        x = self.activation(self.norm(x))
+        x = self.maxPool(x)
+            # .masked_fill(namask,torch.nan) )
         x = x.transpose(1,2)
-        namask = torch.isnan(x)
+        # namask = torch.isnan(x)
 
         # x = self.downConv(x.permute(0, 2, 1))
         # x = self.norm(x)#不同的example 不同的feature 同一个dim做norm
         # x = self.activation(x)
         # x = self.maxPool(x)
         # x = x.transpose(1,2)
-        x = self.norm2(x.masked_fill(namask,0)).masked_fill(namask,torch.nan)
-        del namask
+        # x = self.norm2(x.masked_fill(namask,0)).masked_fill(namask,torch.nan)
+        # del namask
 
         return x
-
 
 class ConvLayer(nn.Module):
     def __init__(self, c_in,kernel_size,withMask=True):
@@ -119,7 +119,7 @@ class Encoder(nn.Module):
                 x, attn = enc_layer(x, attn_mask=attn_mask)
                 attns.append(attn)
         if self.norm is not None:
-            x = self.norm(x)
+            x = self.norm(x)#??????
         return x, attns
 class EncoderStack(nn.Module):
     def __init__(self, encoders, inp_lens):
