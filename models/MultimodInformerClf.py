@@ -2,6 +2,7 @@ from models.attn import FullAttention, ProbAttention, AttentionLayer
 from models.embed import CatesEmbedding,TokenEmbedding,ModalembProj,TokenEmbAndNorm
 from models.encoder import ConvLayer,ConvPoolLayer,Encoder,EncoderLayer
 import torch.nn.functional as F
+from itertools import islice
 import torch.nn as nn
 import torch
 
@@ -19,18 +20,16 @@ class CrossLayer(nn.Module):
 
         super(CrossLayer, self).__init__()
         d_ff = d_ff or 4*d_model
-        # ATT = FullAttention if attType=='full' else ProbAttention
+        ATT = FullAttention if attType=='full' else ProbAttention
         self._crossLayer = AttentionLayer(
-                                FullAttention(
-                                    False, 
-                                    factor, 
-                                    attention_dropout=dropout, 
-                                    output_attention=False
-                                    ), 
-                                d_model, 
-                                n_heads, 
-                                mix=False
-                            )
+                ATT(False,factor, 
+                    attention_dropout=dropout, 
+                    output_attention=False), 
+                d_model, 
+                n_heads, 
+                mix=False
+            )
+
         self.dropout = nn.Dropout(dropout)
         self.conv1 = nn.Conv1d(in_channels=d_model, out_channels=d_ff, kernel_size=1)
         self.conv2 = nn.Conv1d(in_channels=d_ff, out_channels=d_model, kernel_size=1)
@@ -58,99 +57,77 @@ class CrossBlock(nn.Module):
     """docstring for CrossBlock"""
     def __init__(
         self, 
-        crosslayers,
-        conv1layers,
-        numcross,
-        numconv1,
+        crosslayers=None,
+        conv1layers=None,
+        numcross:int=3,
+        numconv1:int=2,
         ):
         super(CrossBlock, self).__init__()
+        if numcross<numconv1+1:
+            raise ValueError(f'''invalid parameter numconv1:{numconv1};
+                        ->numcross:{numcross} should greater than numconv1 + 1''')
         self._numcross = numcross
         self._numconv1 = numconv1
         self._crossList = nn.ModuleList(crosslayers)
-        self._conv1List = nn.ModuleList(conv1layers)
-
-    # def _crossAtt(self,conv1s,crosses,x,y,z,hasConv):
-    def _crossAtt(self,conv1s,crosses,y,z,hasConv):
-        if hasConv:
-            # x1 = conv1s[0](
-            #             crosses[0](x,y) + crosses[1](x,z)
-            #         )
-            # y1 = conv1s[1](
-            #             crosses[2](y,x) + crosses[3](y,z)
-            #         )
-            # z1 = conv1s[2](
-            #             crosses[4](z,x) + crosses[5](z,y)
-            #         )
-            y1 = conv1s[0](crosses[0](y,z))
-            z1 = conv1s[1](crosses[1](z,y))
+        NumOfCross  = len( crosslayers )
+        NumOfConv1D = len( conv1layers )
+        if conv1layers is None:
+            self._conv1List = [None]*len( self._crossList )
         else:
-            # x1 = crosses[0](x,y) + crosses[1](x,z)
-            # y1 = crosses[2](y,x) + crosses[3](y,z)
-            # z1 = crosses[4](z,x) + crosses[5](z,y)         
-            y1 = crosses[0](y,z)
-            z1 = crosses[1](z,y)
+            self._conv1List = nn.ModuleList(conv1layers)
+            for i in range(NumOfCross-NumOfConv1D):
+                self._conv1List.append(None)
+
+    def forward(self,y,z):
+
+        iter_cross = iter(self._crossList)
+        iter_conv1d = iter(self._conv1List)
+
+        for _ in range(self._numcross):
+            y1 = next(iter_cross)(y,z)
+            z1 = next(iter_cross)(z,y)
+            conv1dA = next(iter_conv1d)
+            conv1dB = next(iter_conv1d)
+            if (
+              conv1dA is not None
+              and conv1dB is not None
+            ):
+                y1 = conv1dA(y1)
+                z1 = conv1dB(z1)
+            y = y1
+            z = z1
         return y1,z1
-
-        # return x1,y1,z1
-
-    def forward(
-        self,
-        # x, 
-        y,
-        z
-        ):
-        for layer in range(self._numconv1):
-            # x,y,z = self._crossAtt( 
-            #             self._conv1List[layer*3:layer*3+3],
-            #             self._crossList[layer*3:layer*3+6],
-            #             x,y,z,
-            #             True
-            #             )
-            y,z = self._crossAtt( 
-                        self._conv1List[layer*2:layer*2+2],
-                        self._crossList[layer*2:layer*2+2],
-                        y,z,
-                        True
-                        )
-        for layer in range(self._numconv1,self._numcross):
-            # x,y,z = self._crossAtt( 
-            #             None,
-            #             self._crossList[layer*3:layer*3+6],
-            #             x,y,z,
-            #             False
-            #             )
-            y,z = self._crossAtt( 
-                        None,
-                        self._crossList[layer*2:layer*2+2],
-                        y,z,
-                        False
-                        )
-        return y,z
-        # return x,y,z
             
 class SelfAttBlock(nn.Module):
     """docstring for SelfAttBlock"""
     def __init__(
         self, 
-        crosslayers,
-        conv1layers,
-        numcross,
-        numconv1,
+        crosslayers=None,
+        conv1layers=None,
+        numcross:int=3,
+        numconv1:int=2,
         ):
         super(SelfAttBlock, self).__init__()
+        if numcross<numconv1+1:
+            raise ValueError(f'''invalid parameter numconv1:{numconv1};
+                        ->numcross:{numcross} should greater than numconv1 + 1''')
         self._numcross = numcross
         self._numconv1 = numconv1
         self._crossList = nn.ModuleList(crosslayers)
-        self._conv1List = nn.ModuleList(conv1layers)
+        if conv1layers is None:
+            self._conv1List = [None]*len( self._crossList )
+        else:
+            self._conv1List = nn.ModuleList(conv1layers)
+            for i in range(numcross-numconv1):
+                self._conv1List.append(None)
+
     def forward(self,x):
-        for layer in range(self._numconv1):
-            x = self._conv1List[layer](
-                    self._crossList[layer](x,x)
-                    )
-        for layer in range(self._numconv1,self._numcross):
-            x =  self._crossList[layer](x,x)
+        for encoder,conv1D in zip(self._crossList,self._conv1List ):
+            x = encoder(x,x)
+            if conv1D is not None:
+                x = conv1D(x)
         return x
-        
+
 
 
 class MultiMInformerClf(nn.Module):
@@ -236,20 +213,18 @@ class MultiMInformerClf(nn.Module):
 
         self._embeddingX = ModalembProj(
             [TokenEmbedding( **cfg.modalX.token)],
-                **cfg.modalX.Others
-            ) 
-
+            **cfg.modalX.Others
+        ) 
         self._embeddingY = ModalembProj(
             [CatesEmbedding(**cfg.modalY.cates)],
-                **cfg.modalY.Others
-            ) 
+            **cfg.modalY.Others
+        ) 
         self._embeddingZ = ModalembProj(
             [CatesEmbedding(**cfg.modalZ.cates),
-            TokenEmbedding(**cfg.modalZ.token1),
-            TokenEmbedding(**cfg.modalZ.token2)
-            ],
-                **cfg.modalZ.Others
-            ) #V1
+             TokenEmbedding(**cfg.modalZ.token1),
+             TokenEmbedding(**cfg.modalZ.token2)],
+            **cfg.modalZ.Others
+        ) #V1
         # self._embeddingX = ModalembProj(
         #     [TokenEmbedding( **cfg.modalX.token)],
         #         **cfg.modalX.Others
@@ -285,23 +260,20 @@ class MultiMInformerClf(nn.Module):
         #     ) #prev
         self._crossBlocks = nn.ModuleList([
             CrossBlock(
-                # crossargs:check out examples in paras
-                # convargs:check out examples in paras
                 [CrossLayer(**cfg.crossargs) for i in range( numcross*2) ],
                 [ConvPoolLayer(**cfg.convargs) for i in range( numconv1*2 )],
                 numcross,
-                0) for i in range(3)
-        ])
-
-        encoders = [
+                numconv1) for i in range(3)
+            ])
+        SelfAttParameters = cfg.crossargs
+        SelfAttParameters['attType'] = 'prob'
+        self._selfAttentions = nn.ModuleList([
             SelfAttBlock(
-                # crossargs:check out examples in paras
-                # convargs:check out examples in paras
-                [CrossLayer(**cfg.crossargs) for i in range( numcross) ],
+                [CrossLayer(**SelfAttParameters) for i in range( numcross) ],
                 [ConvPoolLayer(**cfg.convargs) for i in range( numconv1 )],
                 numcross,
-                numconv1) for i in range(6)
-        ]
+                numconv1)   for i in range(6)
+            ])
         
 
         # encoders = [Encoder(
@@ -321,9 +293,6 @@ class MultiMInformerClf(nn.Module):
         #                                                          )
         # # for i in range(3)
         # ]
-        self._selfAttentions = nn.ModuleList( encoders )
-
-
         self._normAndAct0 =  nn.Sequential(
             nn.BatchNorm1d(cfg.d_model * 6),
             nn.ELU(),
@@ -355,28 +324,7 @@ class MultiMInformerClf(nn.Module):
                 nn.ReLU()
             )
 
-
-
-        # self._pooling
         self._projection = nn.Sequential(
-                    # nn.Linear( cfg.d_model*9,(cfg.d_model*9)//2 ),#（256*9->256）
-                    # nn.ReLU(),
-                    # nn.Dropout(cfg.global_dropout),
-                    # nn.Linear( (cfg.d_model*9)//2 ,(cfg.d_model*9)//4 ),
-                    # nn.ReLU(),
-                    # nn.Dropout(cfg.global_dropout),
-                    # nn.Linear( (cfg.d_model*9)//4,128 ),
-                    # nn.ReLU(),
-                    # nn.Dropout(cfg.global_dropout),
-                    # nn.Linear( 128,numclass )
-
-                    # nn.Linear( cfg.d_model*18,(cfg.d_model*18)//4 ),#（256*9->256）
-                    # nn.ReLU(),
-                    # nn.Dropout(cfg.global_dropout), #lastVersion
-                    
-                    # nn.Linear( (cfg.d_model*9)//2 ,(cfg.d_model*9)//4 ),
-                    # nn.ReLU(),
-                    # nn.Dropout(cfg.global_dropout),
                     nn.Linear( (cfg.d_model*3),256 ),
                     nn.ReLU(),
                     nn.Dropout(cfg.global_dropout),
@@ -411,9 +359,6 @@ class MultiMInformerClf(nn.Module):
         y1,z1 = self._crossBlocks[0](y,z)
         x1,y1 = self._crossBlocks[1](x,y)
         x1,z1 = self._crossBlocks[2](x,z)
-#         print('DEBUG value [cross]')
-#         print(y1)
-        
         
         x1 = self._crossConv1Ds[0](x1)
         y1 = self._crossConv1Ds[1](y1)

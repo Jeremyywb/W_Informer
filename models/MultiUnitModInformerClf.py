@@ -1,7 +1,9 @@
 from models.attn import FullAttention, ProbAttention, AttentionLayer
-from models.embed import CatesEmbedding,TokenEmbedding,ModalembProj
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
+from models.embed import CatesEmbedding,TokenEmbedding,ModalembProj,TokenEmbAndNorm
 from models.encoder import ConvLayer,ConvPoolLayer,Encoder,EncoderLayer
 import torch.nn.functional as F
+from itertools import islice
 import torch.nn as nn
 import torch
 
@@ -21,110 +23,143 @@ class CrossLayer(nn.Module):
         d_ff = d_ff or 4*d_model
         ATT = FullAttention if attType=='full' else ProbAttention
         self._crossLayer = AttentionLayer(
-                                ATT(
-                                    False, 
-                                    factor, 
-                                    attention_dropout=dropout, 
-                                    output_attention=False
-                                    ), 
-                                d_model, 
-                                n_heads, 
-                                mix=False
-                            )
+                ATT(False,factor, 
+                    attention_dropout=dropout, 
+                    output_attention=False), 
+                d_model, 
+                n_heads, 
+                mix=False
+            )
+
         self.dropout = nn.Dropout(dropout)
-        self.conv1 = nn.Conv1d(in_channels=d_model, out_channels=d_ff, kernel_size=1)
-        self.conv2 = nn.Conv1d(in_channels=d_ff, out_channels=d_model, kernel_size=1)
+        self.fc1 = nn.Linear(d_model, d_ff)
+        self.fc2 = nn.Linear(d_ff, d_model)
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         
         self.activation = F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, cross, x_mask=None, cross_mask=None):
+        # namask = torch.isnan(x)
         x = x + self.dropout(
-                    self._crossLayer(
-                        x, cross, cross,
-                        attn_mask=cross_mask
-                    )[0])
+                self._crossLayer(
+                    x, cross, cross,
+                    attn_mask=cross_mask )[0]
+            )
                     
         y = x = self.norm1(x)
-        y = self.dropout(self.activation(self.conv1(y.transpose(-1,1))))
-        y = self.dropout(self.conv2(y).transpose(-1,1))
-        return self.norm2(x+y)
-
-class CrossBlock(nn.Module):
-    """docstring for CrossBlock"""
+        y = self.dropout(self.activation(self.fc1(y)))
+        y = self.dropout(self.fc2(y))
+        x = self.norm2( (x+y))
+        if x.dtype == torch.float16 and (
+            torch.isinf(x).any() or torch.isnan(x).any()
+        ):
+            clamp_value = torch.finfo(x.dtype).max - 1000
+            x = torch.clamp(x, min=-clamp_value, max=clamp_value)
+        return x
+            
+class EncoderBlock(nn.Module):
+    """docstring for SelfAttBlock"""
     def __init__(
         self, 
-        crosslayers,
-        conv1layers,
-        numcross,
-        numconv1,
+        crosslayers=None,
+        conv1layers=None,
+        numcross:int=3,
+        numconv1:int=2,
         ):
-        super(CrossBlock, self).__init__()
+        super(EncoderBlock, self).__init__()
+        if numcross<numconv1+1:
+            raise ValueError(f'''invalid parameter numconv1:{numconv1};
+                        ->numcross:{numcross} should greater than numconv1 + 1''')
         self._numcross = numcross
         self._numconv1 = numconv1
         self._crossList = nn.ModuleList(crosslayers)
-        self._conv1List = nn.ModuleList(conv1layers)
-
-    # def _crossAtt(self,conv1s,crosses,x,y,z,hasConv):
-    def _crossAtt(self,conv1s,crosses,y,z,hasConv):
-        if hasConv:
-            # x1 = conv1s[0](
-            #             crosses[0](x,y) + crosses[1](x,z)
-            #         )
-            # y1 = conv1s[1](
-            #             crosses[2](y,x) + crosses[3](y,z)
-            #         )
-            # z1 = conv1s[2](
-            #             crosses[4](z,x) + crosses[5](z,y)
-            #         )
-            y1 = conv1s[0](crosses[0](y,z))
-            z1 = conv1s[1](crosses[1](z,y))
+        if conv1layers is None:
+            self._conv1List = [None]*len( self._crossList )
         else:
-            # x1 = crosses[0](x,y) + crosses[1](x,z)
-            # y1 = crosses[2](y,x) + crosses[3](y,z)
-            # z1 = crosses[4](z,x) + crosses[5](z,y)         
-            y1 = crosses[0](y,z)
-            z1 = crosses[1](z,y)
-        return y1,z1
+            self._conv1List = nn.ModuleList(conv1layers)
+            for i in range(numcross-numconv1):
+                self._conv1List.append(None)
 
-        # return x1,y1,z1
+    def forward(self,x,cross):
+        for encoder,conv1D in zip(self._crossList,self._conv1List ):
+            x = encoder(x,cross)
+            if conv1D is not None:
+                x = conv1D(x)
+        return x
 
-    def forward(
+class AttEncoders(nn.Module):
+    def __init__(
         self,
-        # x, 
-        y,
-        z
-        ):
-        for layer in range(self._numconv1):
-            # x,y,z = self._crossAtt( 
-            #             self._conv1List[layer*3:layer*3+3],
-            #             self._crossList[layer*3:layer*3+6],
-            #             x,y,z,
-            #             True
-            #             )
-            y,z = self._crossAtt( 
-                        self._conv1List[layer*2:layer*2+2],
-                        self._crossList[layer*2:layer*2+2],
-                        y,z,
-                        True
-                        )
-        for layer in range(self._numconv1,self._numcross):
-            # x,y,z = self._crossAtt( 
-            #             None,
-            #             self._crossList[layer*3:layer*3+6],
-            #             x,y,z,
-            #             False
-            #             )
-            y,z = self._crossAtt( 
-                        None,
-                        self._crossList[layer*2:layer*2+2],
-                        y,z,
-                        False
-                        )
-        return y,z
-        # return x,y,z
-            
+        iscross,
+        d_model,
+        numselfs,
+        encoderCrosses=None,
+        encoderConv1Ds=None,
+        numcross:int=3,
+        numconv1:int=2,
+    ):
+    super(AttEncoders, self).__init__()
+    self._encoders = nn.ModuleList([
+        EncoderBlock(
+            crosslayers=crosslayers,
+            conv1layers=conv1layers,
+            numcross=numcross,
+            numconv1=numconv1,
+            )
+        for crosslayers,conv1layers in zip(encoderCrosses,encoderConv1Ds)
+    ])
+    self._layerNorms = nn.ModuleList([
+        nn.LayerNorm(d_model) for i in range(len( encoderCrosses ))
+    ])
+
+    def forward(self,xlist):
+        xencodes = [ ]
+        if iscross:
+            iter_encoders   = iter(self._encoders)
+            iter_layernorms = iter(self._encoders)
+            for idx,x in enumerate( xlist):
+                indices = [_id for _id in range(len(xlist)) if _id != idx]
+                for num,restid in enumerate( indices):
+                    block = next( iter_encoders )
+                    norm  = next( iter_layernorms )
+                    if num ==0:
+                        y = block(x, xlist[restid] )
+                    else:
+                        y = norm( y + block( xlist[restid] ))
+                xencodes.append(y)
+        else:
+            for x,block,norm in zip(xlist,self._encoders,self._layerNorms):
+                x = block(x,x)
+                x = norm(x)
+                xencodes.append(x)
+        return xencodes
+
+class ModalConbin(nn.Module):
+    def __init__(
+        self,
+        numcomb
+    ):
+    super(ModalConbin, self).__init__()
+    self._project = nn.Sequential(
+            nn.Linear(numcomb,numcomb*6),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(numcomb*6,numcomb*6),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(numcomb*6,1),
+            nn.ReLU()
+    )
+    def forward(self,combs:List[torch.Tensor]):
+        o = torch.cat([
+            x.reshape( ( x.shape[0],-1) ).unsqueeze(-1)
+            for x in combs
+            ],
+            dim=-1
+        )
+
+        return self._project(o).reshape( combs[0].shape )
 
 
 
@@ -135,68 +170,6 @@ class MultiMInformerClf(nn.Module):
            numcross * 3 ,3 is the number of modal parts
         numconv1:denotes the number of layers of conv1D with maxpooling etc.
         cfg: global configuration of parameters
-    config example:
-        crossargs[dict]:attr of CFG class for CrossLayer para. examples
-            {'d_model':256, 
-            'd_ff':512,
-            'n_heads':4,
-            'factor':5,
-            'dropout':0.1, 
-            'activation':"relu"}
-        convargs[dict]:attr of CFG class for ConvLayer para. examples
-            {"d_model":256,"kernel_siz":5}
-
-        probAtt = {
-         "mask_flag":False, 
-         "factor":5, 
-         "attention_dropout":0.2, 
-         "output_attention":False
-        }
-        attLayer ={
-            "d_model":d_model, 
-            "n_heads":n_heads, 
-            "mix":True
-        }
-        encoderLayer = {
-        'd_model':d_model, 
-        'd_ff':d_model*2, 
-        'dropout':dropout,
-        'activation':activation
-        }
-        numSelfAttLayer
-        num_class
-        modalX.token = {
-            c_in=token_dim, d_model=embedim
-        }
-        modalX.Others = {
-                embedim,
-                d_model,
-                max_len,
-                kernel_size=5
-        }
-        modalY.cates = {
-            list_vocab_sizes = list_vocab_sizes,
-           list_embed_dims = list_embed_dims,
-           tot_cat_emb_dim  = embedim,
-        }
-        modalY.Others = {
-                embedim,
-                d_model,
-                max_len,
-                kernel_size=5
-        }
-        modalZ.cates = {
-            list_vocab_sizes = list_vocab_sizes,
-           list_embed_dims = list_embed_dims,
-           tot_cat_emb_dim  = embedim,
-        }
-        modalZ.Others = {
-                embedim,
-                d_model,
-                max_len,
-                kernel_size=5
-        }
-        global_dropout
 
     '''
     def __init__(
@@ -207,101 +180,69 @@ class MultiMInformerClf(nn.Module):
         cfg
         ):
         super(MultiMInformerClf, self).__init__()
-        
-        _EmbType = {
-            'TOKEN':TokenEmbedding,
-            'NNEMB':nn.Embedding
-            }
-        self._Embeddings = nn.ModuleList([
+        # nn.Embedding(num_embeddings, embedding_dim, padding_idx
+        # nn.Embedding(**arg, padding_idx=0)
+        self._cfg = cfg
+        Embedding = {'NNEemb':nn.Embedding,'Token':TokenEmbedding}
+        self._embeddings = nn.ModuleList([
             ModalembProj(
-                [_EmbType[EType](**EParas)],
-                    **EProjs
-                )
-                for EType,EParas,EProjs in cfg.EmbCfgs
-            ])
-
-        self._CrossBlocks = nn.ModuleList([
-            CrossBlock(
-                # crossargs:check out examples in paras
-                # convargs:check out examples in paras
-                [CrossLayer(**cfg.crossargs) for i in range( numcross*2) ],
-                [ConvPoolLayer(**cfg.convargs) for i in range( numconv1*2 )],
-                numcross,
-                numconv1) for i in range( cfg.NumEmbCross )
+                [ Embedding[EmbType](**EmbArgs) ],
+                **Others ) 
+            for EmbType,EmbArgs,Others in cfg.embconfig
         ])
-        *********** to be continue ↑
 
-        encoders = [Encoder(
-                        [EncoderLayer( 
-                            AttentionLayer(
-                                ProbAttention(**cfg.SelfATT.probAtt),
-                                    **ARGattLayer
-                                ),**ARGencoderLayer
-                            )
-                         for o in range(cfg.SelfATT.numSelfAttLayer)  ],
-                        [ConvLayer(dm,cfg.SelfATT.kernel_size) 
-                         for l in range(cfg.SelfATT.numSelfAttLayer-1) ] if cfg.SelfATT.distil else None,
-                     norm_layer=torch.nn.LayerNorm(dm) 
-                     ) for ARGattLayer,ARGencoderLayer,dm in zip(cfg.SelfATT.attLyrArgs,
-                                                                 cfg.SelfATT.enclyrArgs,
-                                                                [cfg.d_model]*6
-                                                                 )
-        # for i in range(3)
-        ]
-        self._selfAttentions = nn.ModuleList( encoders )
-        self._normAndAct0 =  nn.Sequential(
-            nn.BatchNorm1d(cfg.d_model * 6),
-            nn.ELU(),
-            nn.Dropout(0.3)
+
+        self_encoderCrosses = [[[
+                    CrossLayer(**cfg.SelfAttParameters) for i in range( numcross) ]
+                    for i in range(cfg.numfeats)
+            ]]*2
+        self_encoderConv1Ds = [[[
+                    ConvPoolLayer(**cfg.SelfConvParameters) for i in range( numconv1) ]
+                    for i in range(cfg.numfeats)
+                ]]*2
+        cross_encoderCrosses = [[
+                    CrossLayer(**cfg.CrosAttParameters) for i in range( numcross) ]
+                    for i in range(cfg.totalCross)
+                ]
+        cross_encoderConv1Ds = [[
+                    ConvPoolLayer(**cfg.CrosConvParameters) for i in range( numconv1) ]
+                    for i in range(cfg.totalCross)
+                ]
+        self.PackSelfAttentions = AttEncoders(
+                iscross=False,
+                d_model=cfg.d_model,
+                numselfs=cfg.numfeats,
+                encoderCrosses=self_encoderCrosses[0],
+                encoderConv1Ds=self_encoderConv1Ds[0],
+                numcross=3,
+                numconv1=2
+        )    
+        self.PackCrosAttentions = AttEncoders(
+                iscross=True,
+                d_model=cfg.d_model,
+                numselfs=cfg.numfeats,
+                encoderCrosses=self_encoderCrosses,
+                encoderConv1Ds=self_encoderConv1Ds,
+                numcross=3,
+                numconv1=2
         )
-        self._normAndAct1 =  nn.Sequential(
-            nn.BatchNorm1d(cfg.d_model *6),
-            nn.ELU(),
-            nn.Dropout(0.3)
-        )
+        self.PackSelfAttentions_2 = AttEncoders(
+                iscross=False,
+                d_model=cfg.d_model,
+                numselfs=cfg.numfeats,
+                encoderCrosses=self_encoderCrosses[1],
+                encoderConv1Ds=self_encoderConv1Ds[1],
+                numcross=3,
+                numconv1=2
+        ) 
 
-        self.dropout = nn.Dropout(0.2)
-        self.conv1 = nn.Conv1d(in_channels=cfg.d_model*6, out_channels=cfg.d_model*24, kernel_size=1)
-        self.conv2 = nn.Conv1d(in_channels=cfg.d_model*24, out_channels=cfg.d_model*6, kernel_size=1)
-        self.norm1 = nn.LayerNorm(cfg.d_model*6)
-        self.activation = F.relu 
-        
-        
-        self._crossConv1Ds = nn.ModuleList( ConvPoolLayer(**cfg.convargs) for i in range(3))
-        self._modalWeithProj = nn.Sequential(
-                nn.Linear(6,32),
-                nn.ReLU(),
-                nn.Dropout(0.1),
-                nn.Linear(32,32),
-                nn.ReLU(),
-                nn.Dropout(0.1),
-                nn.Linear(32,6),
-                nn.Linear(6,1),
-                nn.ReLU()
-            )
+        self.PackCrosCombs = nn.ModuleList([
+            ModalConbin(len(comb)) for comb in cfg.combconfig
+        ])
 
-
-
-        # self._pooling
-        self._projection = nn.Sequential(
-                    # nn.Linear( cfg.d_model*9,(cfg.d_model*9)//2 ),#（256*9->256）
-                    # nn.ReLU(),
-                    # nn.Dropout(cfg.global_dropout),
-                    # nn.Linear( (cfg.d_model*9)//2 ,(cfg.d_model*9)//4 ),
-                    # nn.ReLU(),
-                    # nn.Dropout(cfg.global_dropout),
-                    # nn.Linear( (cfg.d_model*9)//4,128 ),
-                    # nn.ReLU(),
-                    # nn.Dropout(cfg.global_dropout),
-                    # nn.Linear( 128,numclass )
-
-                    # nn.Linear( cfg.d_model*18,(cfg.d_model*18)//4 ),#（256*9->256）
-                    # nn.ReLU(),
-                    # nn.Dropout(cfg.global_dropout), #lastVersion
-                    
-                    # nn.Linear( (cfg.d_model*9)//2 ,(cfg.d_model*9)//4 ),
-                    # nn.ReLU(),
-                    # nn.Dropout(cfg.global_dropout),
+        self.FinalComb = ModalConbin(cfg.finalComb)
+        self.FinalNorm = nn.BatchNorm1d(cfg.d_model * 3)
+        self.OutProj = nn.Sequential(
                     nn.Linear( (cfg.d_model*3),256 ),
                     nn.ReLU(),
                     nn.Dropout(cfg.global_dropout),
@@ -314,56 +255,33 @@ class MultiMInformerClf(nn.Module):
                     dim=dim)
                 )
     def _pooling(self,x):
-        # print(f'DEBUG value [x]\n==========={x}')
-        # print(f'DEBUG shape [x]\n==========={x.shape}')
-        
-        x_std = self.nanstd(x,1)
+        x_std = torch.std(x,dim=1)
         x_mean = torch.nanmean(x, dim=1)
-        x_max = torch.max(o.masked_fill( torch.isnan(x),-torch.inf ),dim=1).values
+        x_max = torch.max(x,dim=1).values
         score  = torch.cat([x_std, x_mean,x_max], dim=1)
         return score
 
-    def forward(self,x,y,z):
-        # embdding ==>conv1d & Embedding
-        # seq -->pad -inf
-        # mask emb(Emb) input==>-inf==>0==>to(torch.int32)
-        # emb(Emb)==>mask repeat--embmask
-        # emb(conv1d)==>
-        x = self._embeddingX(x) #x  
-        y = self._embeddingY(y) #x_cat
-        z = self._embeddingZ(z) #x_extro
-        x = self._selfAttentions[0]( x )[0]
-        y = self._selfAttentions[1]( y )[0]
-        z = self._selfAttentions[2]( z )[0]
-        # y1,z1 = self._crossModalBlock(y,z)
-        y1,z1 = self._CrossBlocks[0](y,z)
-        x1,y1 = self._CrossBlocks[1](x,y)
-        x1,z1 = self._CrossBlocks[2](x,z)
-#         print('DEBUG value [cross]')
-#         print(y1)
-        
-        
-        x1 = self._crossConv1Ds[0](x1)
-        y1 = self._crossConv1Ds[1](y1)
-        # print('DEBUG value [conv1d]')
-        # print(y1)
-        z1 = self._crossConv1Ds[2](z1)
-        # self._CrossBlocks
-        # y1,z1 = self._crossModalBlock(y,z)
-        x = self._selfAttentions[3]( x )[0]
-        y = self._selfAttentions[4]( y )[0]
-        z = self._selfAttentions[5]( z )[0]
+    def forward(self,x_nums,x_cates):
+        numshape,cateshape = x_nums.shape[-1],x_cates.shape[-1]
+        if len(self._embeddings)!= numshape+cateshape:
+            raise ValueError(f'''Number Embedding Layer not equal to feature dims
+                for numfeats:{numshape+cateshape}''')
 
-        o = torch.cat([
-            x.reshape( ( x.shape[0],-1) ).unsqueeze(-1),
-            y.reshape( ( x.shape[0],-1) ).unsqueeze(-1),
-            z.reshape( ( x.shape[0],-1) ).unsqueeze(-1),
-            x1.reshape( ( x.shape[0],-1) ).unsqueeze(-1),
-            y1.reshape( ( x.shape[0],-1) ).unsqueeze(-1),
-            z1.reshape( ( x.shape[0],-1) ).unsqueeze(-1)
-            ],dim=-1)#6
-
-        o = self._modalWeithProj(o).reshape( x.shape )
-        o = self._pooling(o)
-        o = self._projection(o)
+        data = [ ]
+        for n,Embedding in enumerate(self._embeddings):
+            if n<numshape:
+                e = Embedding(x_nums[:,:,n])
+            else:
+                e = Embedding(x_cates[:,:,n-numshape])
+            data.append(e)
+        data = self.PackSelfAttentions(data)
+        Combs = []
+        for CrosCombLayer,comb in zip(self.PackCrosCombs,self._cfg.combconfig)
+            Combs.append( CrosCombLayer( [ data[idx] for idx in comb ] ) )
+        Combs = self.PackCrosAttentions( Combs + [ data[idx] for idx in self._cfg.NoneCombidx  ] )
+        data  = self.PackSelfAttentions_2(data)
+        o = self.FinalComb( data+Combs )
+        o = self.FinalNorm(self._pooling(o))
+        o = self.OutProj(o)
         return  F.sigmoid(o)
+

@@ -30,8 +30,8 @@ class FullAttention(nn.Module):
         A = torch.softmax(scale * scores, dim=-1)
         A = self.dropout( A )
         # print(scores )
-        V = torch.einsum("bhls,bshd->blhd", torch.nan_to_num(A,0), torch.nan_to_num(values,0 ))
-        
+        # V = torch.einsum("bhls,bshd->blhd", torch.nan_to_num(A,0), torch.nan_to_num(values,0 ))
+        V = torch.einsum("bhls,bshd->blhd", A, values)
         if self.output_attention:
             return (V.contiguous(), A)
         else:

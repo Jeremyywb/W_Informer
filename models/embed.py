@@ -29,12 +29,10 @@ class PositionalEmbedding(nn.Module):
         return self.pe[:, :x.size(1)]
 
 class TokenEmbedding(nn.Module):
-    def __init__(self, c_in, d_model,withMask=True):
+    def __init__(self, c_in, d_model):
 
         super(TokenEmbedding, self).__init__()
         padding = 1 if torch.__version__>='1.5.0' else 2
-        # c_in=target_dim = 1
-        self._withMask = withMask
         self.tokenConv = nn.Conv1d(in_channels=c_in, out_channels=d_model, 
                                     kernel_size=3, padding=padding, padding_mode='circular')
         # (N,Cin,Lin) or (N,seqdim,seqlen)
@@ -42,6 +40,7 @@ class TokenEmbedding(nn.Module):
             if isinstance(m, nn.Conv1d):
                 nn.init.kaiming_normal_(m.weight,mode='fan_in',nonlinearity='leaky_relu')
                 #参数可以自动初始化，但是这里自定义用kaiming
+
     def forward(self, x):
         # x->(batch,seq,dim)
         # if self._withMask:
@@ -54,31 +53,29 @@ class TokenEmbedding(nn.Module):
         #seq_len=seq_len-kernel_size+1? False结果应该和stride有关 
         # seq_len=seq_len-stride+1；True
         return x
-class TokenEmbAndNorm(nn.Module):
-    def __init__(self, c_in, d_model):
+        
+class TokenEmbLinear(nn.Module):
+    '''sigle dim(dim==1) sequences '''
+    def __init__(self, lags, d_model):
 
-        super(TokenEmbAndNorm, self).__init__()
+        super(TokenEmbLinear, self).__init__()
         padding = 1 if torch.__version__>='1.5.0' else 2
+        self.lags = lags
         # c_in=target_dim = 1
-        self.tokenConv = nn.Conv1d(in_channels=c_in, out_channels=d_model, 
-                                    kernel_size=3, padding=padding
-                                    # , padding_mode='circular'
-                                    )
-        self.norm = nn.LayerNorm(d_model)
-        # (N,Cin,Lin) or (N,seqdim,seqlen)
-        for m in self.modules():
-            if isinstance(m, nn.Conv1d):
-                nn.init.kaiming_normal_(m.weight,mode='fan_in',nonlinearity='leaky_relu')
-                #参数可以自动初始化，但是这里自定义用kaiming
+        self._valueEmbedding = nn.Linear(in_features=lags+1, out_features=d_model, bias=False)
+    def create_lag_inputs(self,sequence):
+        lag_sequences = [sequence.unsqueeze(-1)]
+        for lag in self.lags:
+            lag_sequence = torch.roll(sequence, shifts=lag, dims=1)
+            lag_sequence[:, :lag] = 0
+            lag_sequences.append(lag_sequence.unsqueeze(-1))
+        return torch.cat(lag_sequences, dim=-1)
+
     def forward(self, x):
         # x->(batch,seq,dim)
-        x = self.tokenConv(x.permute(0, 2, 1)).transpose(1,2) #(bs,seq,embdim )
-        # batch first
-        #seq_len=seq_len-kernel_size+1? False结果应该和stride有关 
-        # seq_len=seq_len-stride+1；True
-        return self.norm(
-                x.masked_fill(torch.isnan(x),0)
-                ).masked_fill(torch.isnan(x),torch.nan)
+        # x = self.tokenConv(x.permute(0, 2, 1)).transpose(1,2)
+        x = self._valueEmbedding(x)
+        return x
 
 class FixedEmbedding(nn.Module):
     def __init__(self, c_in, d_model):
@@ -349,17 +346,9 @@ class ModalembProj(nn.Module):
         self._con1D = ConvPoolLayer(embedim ,d_model,kernel_size )
         max_len = int((max_len+2- kernel_size+1-1)/2+1)
 
-        # self._con1D = nn.Conv1d(
-        #     # (in_channels=d_model, out_channels=d_ff, kernel_size=1
-        #     # projection part play role as linear kernel should be 1
-        #                     in_channels=embedim, 
-        #                     out_channels=d_model, 
-        #                     kernel_size=1, 
-        #                     # padding=1, 
-        #                     # padding_mode='circular'
-        #                     )
         self._pos_embed = PositionalEmbedding(d_model=d_model,max_len=max_len)
         # self._dropout = nn.Dropout(0.1)
+        self.layernorm_embedding = nn.LayerNorm(d_model)
         self._dropout2 = nn.Dropout(0.1)
     def forward(self,x):
         if self.DEBUG:
@@ -407,4 +396,4 @@ class ModalembProj(nn.Module):
         # x = self._dropout(self._encode(x))#(bs,seq,embdim)
         x = self._con1D(x)
         x = x + self._pos_embed(x)#(bs,seq,d_model)
-        return self._dropout2(x)
+        return self._dropout2( self.layernorm_embedding(x)) 
