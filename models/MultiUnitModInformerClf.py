@@ -214,8 +214,8 @@ class MultiMInformerClf(nn.Module):
                 numselfs=cfg.numfeats,
                 encoderCrosses=self_encoderCrosses[0],
                 encoderConv1Ds=self_encoderConv1Ds[0],
-                numcross=3,
-                numconv1=2
+                numcross=numcross,
+                numconv1=numconv1
         )    
         self.PackCrosAttentions = AttEncoders(
                 iscross=True,
@@ -223,8 +223,8 @@ class MultiMInformerClf(nn.Module):
                 numselfs=cfg.numfeats,
                 encoderCrosses=self_encoderCrosses,
                 encoderConv1Ds=self_encoderConv1Ds,
-                numcross=3,
-                numconv1=2
+                numcross=numcross,
+                numconv1=numconv1
         )
         self.PackSelfAttentions_2 = AttEncoders(
                 iscross=False,
@@ -232,8 +232,8 @@ class MultiMInformerClf(nn.Module):
                 numselfs=cfg.numfeats,
                 encoderCrosses=self_encoderCrosses[1],
                 encoderConv1Ds=self_encoderConv1Ds[1],
-                numcross=3,
-                numconv1=2
+                numcross=numcross,
+                numconv1=numconv1
         ) 
 
         self.PackCrosCombs = nn.ModuleList([

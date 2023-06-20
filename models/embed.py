@@ -397,3 +397,5 @@ class ModalembProj(nn.Module):
         x = self._con1D(x)
         x = x + self._pos_embed(x)#(bs,seq,d_model)
         return self._dropout2( self.layernorm_embedding(x)) 
+
+
