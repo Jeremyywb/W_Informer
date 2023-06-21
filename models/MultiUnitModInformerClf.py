@@ -99,34 +99,53 @@ class AttEncoders(nn.Module):
         numcross:int=3,
         numconv1:int=2,
     ):
-    super(AttEncoders, self).__init__()
-    self._encoders = nn.ModuleList([
-        EncoderBlock(
-            crosslayers=crosslayers,
-            conv1layers=conv1layers,
-            numcross=numcross,
-            numconv1=numconv1,
-            )
-        for crosslayers,conv1layers in zip(encoderCrosses,encoderConv1Ds)
-    ])
-    self._layerNorms = nn.ModuleList([
-        nn.LayerNorm(d_model) for i in range(len( encoderCrosses ))
-    ])
+        super(AttEncoders, self).__init__()
+        self.iscross = iscross
+        self._encoders = nn.ModuleList([
+            EncoderBlock(
+                crosslayers=crosslayers,
+                conv1layers=conv1layers,
+                numcross=numcross,
+                numconv1=numconv1,
+                )
+            for crosslayers,conv1layers in zip(encoderCrosses,encoderConv1Ds)
+        ])
+        self._layerNorms1 = nn.ModuleList([
+            nn.LayerNorm(d_model) for i in range(len( encoderCrosses ))
+        ])
+        self._layerNorms2 = nn.ModuleList([
+            nn.LayerNorm(d_model) for i in range(len( encoderCrosses ))
+        ])
+        self._ffns = nn.ModuleList([
+                nn.Sequential(
+                    nn.Linear(d_model,4*d_model),
+                    nn.ELU(),
+                    nn.Dropout(0.1),
+                    nn.Linear(4*d_model,d_model),
+                    nn.Dropout(0.1)
+                ) for i in range(len( encoderCrosses ))
+            ])
+
 
     def forward(self,xlist):
         xencodes = [ ]
-        if iscross:
+        if self.iscross:
             iter_encoders   = iter(self._encoders)
-            iter_layernorms = iter(self._encoders)
+            iter_layernorms1 = iter(self._layerNorms1)
+            iter_layernorms2 = iter(self._layerNorms2)
+            iter_ffns = iter(self._ffns)
             for idx,x in enumerate( xlist):
                 indices = [_id for _id in range(len(xlist)) if _id != idx]
                 for num,restid in enumerate( indices):
                     block = next( iter_encoders )
-                    norm  = next( iter_layernorms )
+                    norm1  = next( iter_layernorms1 )
+                    norm2  = next( iter_layernorms2 )
+                    ffn  = next( iter_ffns )
                     if num ==0:
                         y = block(x, xlist[restid] )
                     else:
-                        y = norm( y + block( x, xlist[restid] ))
+                        y = norm1( y + block( x, xlist[restid] ))
+                        y = norm2( y + ffn(y) )
                 xencodes.append(y)
         else:
             for x,block,norm in zip(xlist,self._encoders,self._layerNorms):
@@ -138,19 +157,29 @@ class AttEncoders(nn.Module):
 class ModalConbin(nn.Module):
     def __init__(
         self,
-        numcomb
+        numcomb,
+        d_model
     ):
-    super(ModalConbin, self).__init__()
-    self._project = nn.Sequential(
-            nn.Linear(numcomb,numcomb*6),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(numcomb*6,numcomb*6),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(numcomb*6,1),
-            nn.ReLU()
-    )
+        super(ModalConbin, self).__init__()
+        self._project = nn.Sequential(
+                nn.Linear(numcomb,numcomb*6),
+                nn.ReLU(),
+                nn.Dropout(0.1),
+                nn.Linear(numcomb*6,numcomb*6),
+                nn.ReLU(),
+                nn.Dropout(0.1),
+                nn.Linear(numcomb*6,1),
+                nn.ReLU()
+          )
+        self._ffn = nn.Sequential(
+                nn.Linear(d_model,4*d_model),
+                nn.ELU(),
+                nn.Dropout(0.1),
+                nn.Linear(4*d_model,d_model),
+                nn.Dropout(0.1)
+            )
+        self._layerNorm = nn.LayerNorm(d_model)
+        
     def forward(self,combs:List[torch.Tensor]):
         o = torch.cat([
             x.reshape( ( x.shape[0],-1) ).unsqueeze(-1)
@@ -158,8 +187,9 @@ class ModalConbin(nn.Module):
             ],
             dim=-1
         )
-
-        return self._project(o).reshape( combs[0].shape )
+        o = self._project(o).reshape( combs[0].shape )
+        o = self._layerNorm(o + self._ffn( o ))
+        return  o
 
 
 
@@ -276,10 +306,10 @@ class MultiMInformerClf(nn.Module):
             data.append(e)
         data = self.PackSelfAttentions(data)
         Combs = []
-        for CrosCombLayer,comb in zip(self.PackCrosCombs,self._cfg.combconfig)
+        for CrosCombLayer,comb in zip(self.PackCrosCombs, self._cfg.combconfig):
             Combs.append( CrosCombLayer( [ data[idx] for idx in comb ] ) )
         data = Combs + [ data[idx] for idx in self._cfg.NoneCombidx  ]
-        Combs = self.PackCrosAttentions( Combs + [ data[idx] for idx in self._cfg.NoneCombidx  ] )
+        Combs = self.PackCrosAttentions( data )
         data  = self.PackSelfAttentions_2(data)
         o = self.FinalComb( data+Combs )
         o = self.FinalNorm(self._pooling(o))

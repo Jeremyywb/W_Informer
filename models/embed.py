@@ -74,7 +74,8 @@ class TokenEmbLinear(nn.Module):
     def forward(self, x):
         # x->(batch,seq,dim)
         # x = self.tokenConv(x.permute(0, 2, 1)).transpose(1,2)
-        x = self._valueEmbedding(x)
+        x = self.create_lag_inputs( x )
+        x = self._valueEmbedding( x )
         return x
 
 class FixedEmbedding(nn.Module):
