@@ -62,7 +62,7 @@ class TokenEmbLinear(nn.Module):
         padding = 1 if torch.__version__>='1.5.0' else 2
         self.lags = lags
         # c_in=target_dim = 1
-        self._valueEmbedding = nn.Linear(in_features=lags+1, out_features=d_model, bias=False)
+        self._valueEmbedding = nn.Linear(in_features=len(lags)+1, out_features=d_model, bias=False)
     def create_lag_inputs(self,sequence):
         lag_sequences = [sequence.unsqueeze(-1)]
         for lag in self.lags:

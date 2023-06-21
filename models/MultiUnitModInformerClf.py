@@ -1,6 +1,6 @@
 from models.attn import FullAttention, ProbAttention, AttentionLayer
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
-from models.embed import CatesEmbedding,TokenEmbedding,ModalembProj,TokenEmbAndNorm
+from models.embed import CatesEmbedding,TokenEmbLinear,ModalembProj
 from models.encoder import ConvLayer,ConvPoolLayer,Encoder,EncoderLayer
 import torch.nn.functional as F
 from itertools import islice
@@ -126,7 +126,7 @@ class AttEncoders(nn.Module):
                     if num ==0:
                         y = block(x, xlist[restid] )
                     else:
-                        y = norm( y + block( xlist[restid] ))
+                        y = norm( y + block( x, xlist[restid] ))
                 xencodes.append(y)
         else:
             for x,block,norm in zip(xlist,self._encoders,self._layerNorms):
@@ -183,7 +183,7 @@ class MultiMInformerClf(nn.Module):
         # nn.Embedding(num_embeddings, embedding_dim, padding_idx
         # nn.Embedding(**arg, padding_idx=0)
         self._cfg = cfg
-        Embedding = {'NNEemb':nn.Embedding,'Token':TokenEmbedding}
+        Embedding = {'NNEemb':nn.Embedding,'Token':TokenEmbLinear}
         self._embeddings = nn.ModuleList([
             ModalembProj(
                 [ Embedding[EmbType](**EmbArgs) ],
@@ -221,8 +221,8 @@ class MultiMInformerClf(nn.Module):
                 iscross=True,
                 d_model=cfg.d_model,
                 numselfs=cfg.numfeats,
-                encoderCrosses=self_encoderCrosses,
-                encoderConv1Ds=self_encoderConv1Ds,
+                encoderCrosses=cross_encoderCrosses,
+                encoderConv1Ds=cross_encoderConv1Ds,
                 numcross=numcross,
                 numconv1=numconv1
         )
@@ -230,7 +230,7 @@ class MultiMInformerClf(nn.Module):
                 iscross=False,
                 d_model=cfg.d_model,
                 numselfs=cfg.numfeats,
-                encoderCrosses=self_encoderCrosses[1],
+                encoderCrosses=self_encoderCrosses[1],#on how many used final
                 encoderConv1Ds=self_encoderConv1Ds[1],
                 numcross=numcross,
                 numconv1=numconv1
@@ -278,6 +278,7 @@ class MultiMInformerClf(nn.Module):
         Combs = []
         for CrosCombLayer,comb in zip(self.PackCrosCombs,self._cfg.combconfig)
             Combs.append( CrosCombLayer( [ data[idx] for idx in comb ] ) )
+        data = Combs + [ data[idx] for idx in self._cfg.NoneCombidx  ]
         Combs = self.PackCrosAttentions( Combs + [ data[idx] for idx in self._cfg.NoneCombidx  ] )
         data  = self.PackSelfAttentions_2(data)
         o = self.FinalComb( data+Combs )
