@@ -113,12 +113,12 @@ class AttEncoders(nn.Module):
         self._layerNorms1 = nn.ModuleList([
             nn.LayerNorm(d_model) for i in range(len( encoderCrosses ))
         ])
-        self._layerNorms2 = nn.ModuleList([
-            nn.LayerNorm(d_model) for i in range(len( encoderCrosses ))
-        ])
+        # self._layerNorms2 = nn.ModuleList([
+        #     nn.LayerNorm(d_model) for i in range(len( encoderCrosses ))
+        # ])
         self._ffns = nn.ModuleList([
                 nn.Sequential(
-                    nn.Linear(d_model,4*d_model),
+                    nn.Linear(d_model*3,4*d_model),
                     nn.ELU(),
                     nn.Dropout(0.1),
                     nn.Linear(4*d_model,d_model),
@@ -132,27 +132,39 @@ class AttEncoders(nn.Module):
         if self.iscross:
             iter_encoders   = iter(self._encoders)
             iter_layernorms1 = iter(self._layerNorms1)
-            iter_layernorms2 = iter(self._layerNorms2)
+            # iter_layernorms2 = iter(self._layerNorms2)
             iter_ffns = iter(self._ffns)
-            for idx,x in enumerate( xlist):
-                indices = [_id for _id in range(len(xlist)) if _id != idx]
-                for num,restid in enumerate( indices):
-                    block = next( iter_encoders )
-                    norm1  = next( iter_layernorms1 )
-                    norm2  = next( iter_layernorms2 )
-                    ffn  = next( iter_ffns )
-                    if num ==0:
-                        y = block(x, xlist[restid] )
-                    else:
-                        y = norm1( y + block( x, xlist[restid] ))
-                        y = norm2( y + ffn(y) )
-                xencodes.append(y)
+            mainX = xlist[0]
+            for idx, x in enumerate( xlist[1:] ):
+                block = next(iter_encoders )
+                ffn  = next( iter_ffns )
+                norm1  = next( iter_layernorms1 )
+                if idx==0:
+                    y = block(mainX, x)
+                else:
+                    y = torch.cat([y, block(mainX, x)], dim=-1)
+            y = norm1(ffn(y))
+            return y
+            # for idx,x in enumerate( xlist):
+            #     indices = [_id for _id in range(len(xlist)) if _id != idx]
+            #     for num,restid in enumerate( indices):
+            #         block = next( iter_encoders )
+            #         norm1  = next( iter_layernorms1 )
+            #         norm2  = next( iter_layernorms2 )
+            #         ffn  = next( iter_ffns )
+            #         if num ==0:
+            #             y = block(x, xlist[restid] )
+            #         else:
+            #             y = norm1( y + block( x, xlist[restid] ))
+            #             y = norm2( y + ffn(y) )
+            #     xencodes.append(y)
         else:
-            for x,block,norm in zip(xlist,self._encoders,self._layerNorms):
-                x = block(x,x)
+            for x, block, norm in zip(xlist, self._encoders, self._layerNorms1):
+                x = block(x, x)
                 x = norm(x)
                 xencodes.append(x)
-        return xencodes
+            return xencodes
+
 
 class ModalConbin(nn.Module):
     def __init__(
@@ -178,6 +190,7 @@ class ModalConbin(nn.Module):
                 nn.Linear(4*d_model,d_model),
                 nn.Dropout(0.1)
             )
+        
         self._layerNorm = nn.LayerNorm(d_model)
         
     def forward(self,combs:List[torch.Tensor]):
@@ -187,8 +200,8 @@ class ModalConbin(nn.Module):
             ],
             dim=-1
         )
-        o = self._project(o).reshape( combs[0].shape )
-        o = self._layerNorm(o + self._ffn( o ))
+        o = self._project(o).reshape(combs[0].shape)
+        o = self._layerNorm(o + self._ffn(o))
         return  o
 
 
@@ -202,6 +215,7 @@ class MultiMInformerClf(nn.Module):
         cfg: global configuration of parameters
 
     '''
+
     def __init__(
         self,
         numcross,
@@ -220,7 +234,14 @@ class MultiMInformerClf(nn.Module):
                 **Others ) 
             for EmbType,EmbArgs,Others in cfg.embconfig
         ])
-
+        self.EmbStepComb = nn.Sequential(
+                nn.Linear(cfg.d_model*2, 4*cfg.d_model),
+                nn.ELU(),
+                nn.Dropout(0.1),
+                nn.Linear(4*cfg.d_model, cfg.d_model),
+                nn.Dropout(0.1),
+                nn.LayerNorm(cfg.d_model)
+            )
 
         self_encoderCrosses = [[[
                     CrossLayer(**cfg.SelfAttParameters) for i in range( numcross) ]
@@ -246,8 +267,9 @@ class MultiMInformerClf(nn.Module):
                 encoderConv1Ds=self_encoderConv1Ds[0],
                 numcross=numcross,
                 numconv1=numconv1
-        )    
-        self.PackCrosAttentions = AttEncoders(
+            )
+        self.PackCrosAttentions = nn.ModuleList([
+            AttEncoders(
                 iscross=True,
                 d_model=cfg.d_model,
                 numselfs=cfg.numfeats,
@@ -255,35 +277,41 @@ class MultiMInformerClf(nn.Module):
                 encoderConv1Ds=cross_encoderConv1Ds,
                 numcross=numcross,
                 numconv1=numconv1
-        )
-        self.PackSelfAttentions_2 = AttEncoders(
-                iscross=False,
-                d_model=cfg.d_model,
-                numselfs=cfg.numfeats,
-                encoderCrosses=self_encoderCrosses[1],#on how many used final
-                encoderConv1Ds=self_encoderConv1Ds[1],
-                numcross=numcross,
-                numconv1=numconv1
-        ) 
-
-        self.PackCrosCombs = nn.ModuleList([
-            ModalConbin(len(comb)) for comb in cfg.combconfig
+                ) for i in range(len(cfg.CrossPacks))
         ])
+        self.PackConvLayer = nn.ModuleList([
+            ConvPoolLayer(cfg.d_model, cfg.d_model) for i in range(5)
+        ])
+        # self.PackSelfAttentions_2 = AttEncoders(
+        #         iscross=False,
+        #         d_model=cfg.d_model,
+        #         numselfs=cfg.numfeats,
+        #         encoderCrosses=self_encoderCrosses[1],#on how many used final
+        #         encoderConv1Ds=self_encoderConv1Ds[1],
+        #         numcross=numcross,
+        #         numconv1=numconv1
+        # ) 
 
-        self.FinalComb = ModalConbin(cfg.finalComb)
-        self.FinalNorm = nn.BatchNorm1d(cfg.d_model * 3)
+        # self.PackCrosCombs = nn.ModuleList([
+        #     ModalConbin(len(comb)) for comb in cfg.combconfig
+        # ])
+
+        # self.FinalComb = ModalConbin(cfg.finalComb)
+        self.FinalNorm = nn.BatchNorm1d(cfg.d_model * 15)
         self.OutProj = nn.Sequential(
-                    nn.Linear( (cfg.d_model*3),256 ),
+                    nn.Linear((cfg.d_model*15), 256),
                     nn.ReLU(),
                     nn.Dropout(cfg.global_dropout),
-                    nn.Linear( 256,numclass )
+                    nn.Linear(256, numclass)
                     )
+
     def nanstd(self,o,dim):
         return torch.sqrt(
                 torch.nanmean(
                     torch.pow( torch.abs(o-torch.nanmean(o,dim=1).unsqueeze(1)),2),
                     dim=dim)
                 )
+
     def _pooling(self,x):
         x_std = torch.std(x,dim=1)
         x_mean = torch.nanmean(x, dim=1)
@@ -298,21 +326,43 @@ class MultiMInformerClf(nn.Module):
                 for numfeats:{numshape+cateshape}''')
 
         data = [ ]
-        for n,Embedding in enumerate(self._embeddings):
-            if n<numshape:
-                e = Embedding(x_nums[:,:,n])
+        for n, Embedding in enumerate(self._embeddings):
+            if n < numshape:
+                e = Embedding(x_nums[:, :, n]) # 256|512/2
             else:
-                e = Embedding(x_cates[:,:,n-numshape])
+                e = Embedding(x_cates[:, :, n-numshape])
             data.append(e)
-        data = self.PackSelfAttentions(data)
+
+        if self._cfg.CombMode == 'embedding_step':
+            embstep_comb = []
+            for comb in self._cfg.combconfig:
+                o = torch.cat([data[idx] for idx in comb], dim=-1)
+                o = self.EmbStepComb(o)
+                embstep_comb.append(o)
+            data = [data[c] for c in self._cfg.NoneCombidx]
+            data.extend(embstep_comb)
+        data = self.PackSelfAttentions(data)# 64|256/4
         Combs = []
-        for CrosCombLayer,comb in zip(self.PackCrosCombs, self._cfg.combconfig):
-            Combs.append( CrosCombLayer( [ data[idx] for idx in comb ] ) )
-        data = Combs + [ data[idx] for idx in self._cfg.NoneCombidx  ]
-        Combs = self.PackCrosAttentions( data )
-        data  = self.PackSelfAttentions_2(data)
-        o = self.FinalComb( data+Combs )
-        o = self.FinalNorm(self._pooling(o))
-        o = self.OutProj(o)
-        return  F.sigmoid(o)
+        for comb, encoder in zip(self._cfg.CrossPacks, self.PackCrosAttentions):
+            Combs.append(encoder([data[c] for c in comb]))
+        usedCrosId = [c[0] for c in self._cfg.CrossPacks]
+        for i, o in zip(usedCrosId, Combs):
+            data[i] = o
+        data = [conv(o) for conv, o in zip(self.PackConvLayer, data)] #5 for pack
+        data = torch.cat([self._pooling(o) for o in data], dim=1)#3*5
+        data = self.FinalNorm(data)
+        data = self.OutProj(data)
+        return F.sigmoid(data)
+        
+        
+        
+#         for CrosCombLayer,comb in zip(self.PackCrosCombs, self._cfg.combconfig):
+#             Combs.append( CrosCombLayer( [ data[idx] for idx in comb ] ) )
+#         data = Combs + [ data[idx] for idx in self._cfg.NoneCombidx  ]
+#         Combs = self.PackCrosAttentions( data )
+#         data  = self.PackSelfAttentions_2(data)
+#         o = self.FinalComb( data+Combs )
+#         o = self.FinalNorm(self._pooling(o))
+#         o = self.OutProj(o)
+#         return  F.sigmoid(o)
 
