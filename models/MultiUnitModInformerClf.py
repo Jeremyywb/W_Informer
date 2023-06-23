@@ -32,8 +32,10 @@ class CrossLayer(nn.Module):
             )
 
         self.dropout = nn.Dropout(dropout)
-        self.fc1 = nn.Linear(d_model, d_ff)
-        self.fc2 = nn.Linear(d_ff, d_model)
+        # self.fc1 = nn.Linear(d_model, d_ff)
+        # self.fc2 = nn.Linear(d_ff, d_model)
+        self.fc1 = nn.Conv1d(d_model, d_ff, 1)
+        self.fc2 = nn.Conv1d(d_ff, d_model, 1)
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         
@@ -48,8 +50,8 @@ class CrossLayer(nn.Module):
             )
                     
         y = x = self.norm1(x)
-        y = self.dropout(self.activation(self.fc1(y)))
-        y = self.dropout(self.fc2(y))
+        y = self.dropout(self.activation(self.fc1(y.permute(0, 2, 1))))
+        y = self.dropout(self.fc2(y).transpose(1, 2))
         x = self.norm2( (x+y))
         if x.dtype == torch.float16 and (
             torch.isinf(x).any() or torch.isnan(x).any()
@@ -97,7 +99,7 @@ class AttEncoders(nn.Module):
         encoderCrosses=None,
         encoderConv1Ds=None,
         numcross:int=3,
-        numconv1:int=2,
+        numconv1:int=2
     ):
         super(AttEncoders, self).__init__()
         self.iscross = iscross
@@ -118,10 +120,13 @@ class AttEncoders(nn.Module):
         # ])
         self._ffns = nn.ModuleList([
                 nn.Sequential(
-                    nn.Linear(d_model*3,4*d_model),
+                    nn.(8, 32, 1)
+                    nn.Conv1d(d_model*3,4*d_model, 1),
+                    # nn.Linear(d_model*3,4*d_model),
                     nn.ELU(),
                     nn.Dropout(0.1),
-                    nn.Linear(4*d_model,d_model),
+                    nn.Conv1d(4*d_model,d_model, 1),
+                    # nn.Linear(4*d_model,d_model),
                     nn.Dropout(0.1)
                 ) for i in range(len( encoderCrosses ))
             ])
@@ -143,7 +148,7 @@ class AttEncoders(nn.Module):
                     y = block(mainX, x)
                 else:
                     y = torch.cat([y, block(mainX, x)], dim=-1)
-            y = norm1(ffn(y))
+            y = norm1(ffn(y.permute(0,2,1)).transpose(1,2) )
             return y
             # for idx,x in enumerate( xlist):
             #     indices = [_id for _id in range(len(xlist)) if _id != idx]
@@ -184,10 +189,12 @@ class ModalConbin(nn.Module):
                 nn.ReLU()
           )
         self._ffn = nn.Sequential(
-                nn.Linear(d_model,4*d_model),
+                # nn.Linear(d_model,4*d_model),
+                nn.Conv1d(d_model, 4*d_model, 1),
                 nn.ELU(),
                 nn.Dropout(0.1),
-                nn.Linear(4*d_model,d_model),
+                # nn.Linear(4*d_model,d_model),
+                nn.Conv1d(4*d_model, d_model, 1),
                 nn.Dropout(0.1)
             )
         
@@ -201,10 +208,48 @@ class ModalConbin(nn.Module):
             dim=-1
         )
         o = self._project(o).reshape(combs[0].shape)
-        o = self._layerNorm(o + self._ffn(o))
+        o = self._layerNorm(o + self._ffn(o.permute(0,2,1)).transpose(1,2) )
         return  o
 
+class DiaConv1D(nn.Module):
+    def __init__(
+        self,
+        # dilation,
+        kernel_size,
+        d_model
+    ):
+        super(DiaConv1D, self).__init__()
+        parameters = {
+            'in_channels':d_model ,
+            'out_channels': d_model,
+            'kernel_size': kernel_size,
+            'padding': 1,
+            'dilation':1,
+            'padding_mode':'circular'
+        }
+        self.net = nn.Sequential(
+            nn.Conv1d(**parameters ),
+            nn.ReLU(),
+            nn.Dropout(0.2)
+        )
+    def forward(self,x):
+        x = self.net(x.permute(0,2,1)).transpose(1,2)
+        return x
 
+class PackDiaConv1D(nn.Module):
+    def __init__(
+        self,
+        dilations,
+        d_model
+    ):
+        super(PackDiaConv1D, self).__init__()
+        self.nets = nn.ModuleList(
+            [DiaConv1D(dia,d_model) for dia in dilations]
+        )
+    def forward(self,x):
+        for diaConv1D in self.nets:
+            x = diaConv1D(x)
+        return x
 
 class MultiMInformerClf(nn.Module):
     '''
@@ -235,13 +280,16 @@ class MultiMInformerClf(nn.Module):
             for EmbType,EmbArgs,Others in cfg.embconfig
         ])
         self.EmbStepComb = nn.Sequential(
-                nn.Linear(cfg.d_model*2, 4*cfg.d_model),
+                # nn.Linear(cfg.d_model*2, 4*cfg.d_model),
+                nn.Conv1d(cfg.d_model*2, 4*cfg.d_model,1),
                 nn.ELU(),
                 nn.Dropout(0.1),
-                nn.Linear(4*cfg.d_model, cfg.d_model),
-                nn.Dropout(0.1),
-                nn.LayerNorm(cfg.d_model)
+                # nn.Linear(4*cfg.d_model, cfg.d_model),
+                nn.Conv1d(4*cfg.d_model, cfg.d_model, 1),
+                nn.Dropout(0.1)
+                
             )
+        self.EmbCombNorm = nn.LayerNorm(cfg.d_model)
 
         self_encoderCrosses = [[[
                     CrossLayer(**cfg.SelfAttParameters) for i in range( numcross) ]
@@ -279,9 +327,12 @@ class MultiMInformerClf(nn.Module):
                 numconv1=numconv1
                 ) for i in range(len(cfg.CrossPacks))
         ])
-        self.PackConvLayer = nn.ModuleList([
-            ConvPoolLayer(cfg.d_model, cfg.d_model) for i in range(5)
-        ])
+
+        self._PackDiaConv1D = nn.ModuleList(
+          [PackDiaConv1D(cfg.dias, cfg.d_model) for i in range( 4)]
+        ) 
+
+
         # self.PackSelfAttentions_2 = AttEncoders(
         #         iscross=False,
         #         d_model=cfg.d_model,
@@ -297,12 +348,14 @@ class MultiMInformerClf(nn.Module):
         # ])
 
         # self.FinalComb = ModalConbin(cfg.finalComb)
-        self.FinalNorm = nn.BatchNorm1d(cfg.d_model * 15)
+        self.FinalNorm = nn.BatchNorm1d(cfg.d_model * 12)
         self.OutProj = nn.Sequential(
-                    nn.Linear((cfg.d_model*15), 256),
+                    # nn.Linear((cfg.d_model*12), 256),
+                    nn.Conv1d((cfg.d_model*12), 256, 1),
                     nn.ReLU(),
                     nn.Dropout(cfg.global_dropout),
-                    nn.Linear(256, numclass)
+                    # nn.Linear(256, numclass)
+                    nn.Conv1d(256, numclass, 1)
                     )
 
     def nanstd(self,o,dim):
@@ -337,7 +390,11 @@ class MultiMInformerClf(nn.Module):
             embstep_comb = []
             for comb in self._cfg.combconfig:
                 o = torch.cat([data[idx] for idx in comb], dim=-1)
-                o = self.EmbStepComb(o)
+                o = self.EmbCombNorm(
+                        self.EmbStepComb(
+                            o.permute(0,2,1)
+                            ).transpose(1,2)
+                        )
                 embstep_comb.append(o)
             data = [data[c] for c in self._cfg.NoneCombidx]
             data.extend(embstep_comb)
@@ -348,21 +405,12 @@ class MultiMInformerClf(nn.Module):
         usedCrosId = [c[0] for c in self._cfg.CrossPacks]
         for i, o in zip(usedCrosId, Combs):
             data[i] = o
-        data = [conv(o) for conv, o in zip(self.PackConvLayer, data)] #5 for pack
-        data = torch.cat([self._pooling(o) for o in data], dim=1)#3*5
+        data = [diaConv1D(o) for diaConv1D,o in zip(self._PackDiaConv1D, data)]
+        # data = [conv(o) for conv, o in zip(self.PackConvLayer, data)] #5 for pack|4
+        data = torch.cat([self._pooling(o) for o in data], dim=1)#3*5 |3*4
         data = self.FinalNorm(data)
-        data = self.OutProj(data)
+        data = self.OutProj(data.unsqueeze(-1)).squeeze(-1)#conv1d proj
         return F.sigmoid(data)
         
-        
-        
-#         for CrosCombLayer,comb in zip(self.PackCrosCombs, self._cfg.combconfig):
-#             Combs.append( CrosCombLayer( [ data[idx] for idx in comb ] ) )
-#         data = Combs + [ data[idx] for idx in self._cfg.NoneCombidx  ]
-#         Combs = self.PackCrosAttentions( data )
-#         data  = self.PackSelfAttentions_2(data)
-#         o = self.FinalComb( data+Combs )
-#         o = self.FinalNorm(self._pooling(o))
-#         o = self.OutProj(o)
-#         return  F.sigmoid(o)
+
 

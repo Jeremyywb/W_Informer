@@ -69,7 +69,9 @@ class ConvLayer(nn.Module):
         x = x.transpose(1,2)
         return x
 
-    
+
+
+
 class EncoderLayer(nn.Module):
     def __init__(self, attention, d_model, d_ff=None, dropout=0.1, activation="relu"):
         super(EncoderLayer, self).__init__()
