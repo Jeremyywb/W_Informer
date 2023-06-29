@@ -8,7 +8,7 @@ from models.encoder import ConvPoolLayer
 
 
 class PositionalEmbedding(nn.Module):
-    def __init__(self, d_model, max_len=5000):
+    def __init__(self, d_model, max_len=4330):
         super(PositionalEmbedding, self).__init__()
         # Compute the positional encodings once in log space.
         # max_len?预定句子长度？
@@ -24,9 +24,14 @@ class PositionalEmbedding(nn.Module):
         pe = pe.unsqueeze(0)
         self.register_buffer('pe', pe)
 
-    def forward(self, x):
+    def forward(self, x,postye = 'sep'):
+        if postye =='sep':## sep and self
+            return self.pe[:, x].squeeze(0)
+        else:
+            return self.pe[:, :x.size(1)]
         # x 传入位置
-        return self.pe[:, :x.size(1)]
+        
+        # 
 
 class TokenEmbedding(nn.Module):
     def __init__(self, c_in, d_model):
@@ -323,7 +328,6 @@ class CollectEmbedding(nn.Module):
         # o = self._emb_dim_proj( o )+o
         # o = self.dropout(o)
         # return o + p#(bs,seq,all_embed_dim)
-     
 class ModalembProj(nn.Module):
     def __init__(
         self,
@@ -332,13 +336,14 @@ class ModalembProj(nn.Module):
         d_model,
         max_len,#max len in batch
         kernel_size,
+        useConv=True,
         DEBUG=False
         # kernel_size=5
         ):
         super(ModalembProj, self).__init__()
         self.DEBUG = DEBUG
         self._embedding = nn.ModuleList(embedding)
-
+        self.useConv = useConv
         if self.DEBUG:
             print('DEBUG Parameter [embedding]\n[==============]')
             print(' - ',embedding.parameters)
@@ -350,39 +355,21 @@ class ModalembProj(nn.Module):
         #     )
 
         self._con1D = ConvPoolLayer(embedim ,d_model,kernel_size )
-        max_len = int((max_len+2- kernel_size+1-1)/2+1)
-
-        self._pos_embed = PositionalEmbedding(d_model=d_model,max_len=max_len)
+        # if self.useConv:
+        #     max_len = int((max_len+2- kernel_size+1-1)/2+1)
+        self._pos_embed = PositionalEmbedding(d_model=embedim,max_len=max_len)
         # self._dropout = nn.Dropout(0.1)
         self.layernorm_embedding = nn.LayerNorm(d_model)
         self._dropout2 = nn.Dropout(0.1)
-    def forward(self,x):
+    def forward(
+        self,
+        x,
+        # x_pos
+    ):
         if self.DEBUG:
             print('DEBUG shape [Input]')
             print('[==============] - ',x.shape)
         if len(self._embedding)>1:
-            # embs = []
-            # t = 0
-            # for o,_emb in enumerate( self._embedding ):
-            #     embs.append( _emb( x[:,:,:o] ) )
-            #     t +=1
-
-            # _o = sum( embs )
-            # for o,e in enumerate( embs[:-1] ):
-            #     for e1 in  embs[o+1:]:
-            #         _o += e*e1
-            #         t += 1
-            # _o = _o/t #V2
-            #     self._embedding[0](x[:,:,:-2]),
-            #     self._embedding[1](x[:,:,-2]),
-            #     self._embedding[2](x[:,:,-1])],
-
-            # x = torch.cat([
-            #     self._embedding[0](x[:,:,:-2]),
-            #     self._embedding[1](x[:,:,-2]),
-            #     self._embedding[2](x[:,:,-1])],
-            #     dim = -1
-            #     ) #V1
             x = torch.cat([
                 self._embedding[0](x[0]),
                 self._embedding[1](x[1][:,:,0].unsqueeze(-1)  ),
@@ -393,15 +380,41 @@ class ModalembProj(nn.Module):
             
         else:
             x = self._embedding[0](x)#(bs,seq,embdim)
-            # x = x_time * x
+            x = x + self._pos_embed(x,postye='self')
         if self.DEBUG:
             print('DEBUG shape [Embed]')
             print('[==============] - ',x.shape)
             print('DEBUG Parameter [con1D]')
             print('[==============] - ',self._con1D.parameters)
-        # x = self._dropout(self._encode(x))#(bs,seq,embdim)
         x = self._con1D(x)
-        x = x + self._pos_embed(x)#(bs,seq,d_model)
-        return self._dropout2( self.layernorm_embedding(x)) 
+        return self._dropout2( self.layernorm_embedding(x))
 
+class PosAndProject(nn.Module):
+    def __init__(
+        self,
+        embedim,
+        d_model,
+        max_len,#max len in batch
+        kernel_size,
+        DEBUG=False
+        ):
+        super(PosAndProject, self).__init__()
+        self.DEBUG = DEBUG
 
+        if self.DEBUG:
+            print('DEBUG Parameter [embedding]\n[==============]')
+        self._con1D = ConvPoolLayer(embedim ,d_model,kernel_size )
+        max_len = int((max_len+2- kernel_size+1-1)/2+1)
+        self._pos_embed = PositionalEmbedding(
+                    d_model=d_model,max_len=max_len
+                )
+        self.layernorm_embedding = nn.LayerNorm(d_model)
+        self._dropout = nn.Dropout(0.1)
+    def forward(self,x):
+        #x:embedding
+        if self.DEBUG:
+            print('DEBUG shape [Input]')
+            print('[==============] - ',x.shape)
+        x = self._con1D(x)
+        x = x + self._pos_embed(x,postye='self') #(bs,seq,d_model)
+        return self._dropout( self.layernorm_embedding(x))

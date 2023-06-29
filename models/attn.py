@@ -222,3 +222,6 @@ class AttLayerSeqMask(nn.Module):
         out = out.view(B, L, -1)
 
         return self.out_projection(out), attn
+
+
+

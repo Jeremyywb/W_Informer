@@ -1,6 +1,7 @@
 from models.attn import FullAttention, ProbAttention, AttentionLayer
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 from models.embed import CatesEmbedding,TokenEmbLinear,ModalembProj
+from models.embed import PositionalEmbedding,TokenEmbedding,PosAndProject
 from models.encoder import ConvLayer,ConvPoolLayer,Encoder,EncoderLayer
 import torch.nn.functional as F
 from itertools import islice
@@ -59,7 +60,42 @@ class CrossLayer(nn.Module):
             clamp_value = torch.finfo(x.dtype).max - 1000
             x = torch.clamp(x, min=-clamp_value, max=clamp_value)
         return x
-            
+
+class CateAtte(nn.Module):
+    def __init__(
+        self, 
+        d_model,
+        norm_dim,
+        n_heads=6,
+        factor=35,#top 245|from 512-1024
+        dropout=0.1, 
+        attType = 'full',
+        ):
+
+        super(CateAtte, self).__init__()
+        ATT = FullAttention if attType=='full' else ProbAttention
+        self._crossLayer = AttentionLayer(
+                ATT(False,factor, 
+                    attention_dropout=dropout, 
+                    output_attention=False), 
+                d_model, 
+                n_heads, 
+                mix=False
+            )
+
+        self.dropout = nn.Dropout(dropout)
+        self.norm1 = nn.LayerNorm(norm_dim)
+    def forward(self, x, x_mask=None, cross_mask=None):
+        # namask = torch.isnan(x)
+        x = x.permute(0,2,1)
+        x = x * self.dropout(
+                self._crossLayer(
+                    x, x, x,
+                    attn_mask=cross_mask )[0]
+            )
+        return self.norm1(x.transpose(1,2))
+
+
 class EncoderBlock(nn.Module):
     """docstring for SelfAttBlock"""
     def __init__(
@@ -84,7 +120,7 @@ class EncoderBlock(nn.Module):
                 self._conv1List.append(None)
 
     def forward(self,x,cross):
-        for encoder,conv1D in zip(self._crossList,self._conv1List ):
+        for encoder,conv1D in zip(self._crossList, self._conv1List ):
             x = encoder(x,cross)
             if conv1D is not None:
                 x = conv1D(x)
@@ -95,7 +131,6 @@ class AttEncoders(nn.Module):
         self,
         iscross,
         d_model,
-        numselfs,
         encoderCrosses=None,
         encoderConv1Ds=None,
         numcross:int=3,
@@ -120,7 +155,7 @@ class AttEncoders(nn.Module):
         # ])
         self._ffns = nn.ModuleList([
                 nn.Sequential(
-                    nn.(8, 32, 1)
+                    # nn.(8, 32, 1)
                     nn.Conv1d(d_model*3,4*d_model, 1),
                     # nn.Linear(d_model*3,4*d_model),
                     nn.ELU(),
@@ -150,26 +185,12 @@ class AttEncoders(nn.Module):
                     y = torch.cat([y, block(mainX, x)], dim=-1)
             y = norm1(ffn(y.permute(0,2,1)).transpose(1,2) )
             return y
-            # for idx,x in enumerate( xlist):
-            #     indices = [_id for _id in range(len(xlist)) if _id != idx]
-            #     for num,restid in enumerate( indices):
-            #         block = next( iter_encoders )
-            #         norm1  = next( iter_layernorms1 )
-            #         norm2  = next( iter_layernorms2 )
-            #         ffn  = next( iter_ffns )
-            #         if num ==0:
-            #             y = block(x, xlist[restid] )
-            #         else:
-            #             y = norm1( y + block( x, xlist[restid] ))
-            #             y = norm2( y + ffn(y) )
-            #     xencodes.append(y)
         else:
             for x, block, norm in zip(xlist, self._encoders, self._layerNorms1):
                 x = block(x, x)
                 x = norm(x)
                 xencodes.append(x)
             return xencodes
-
 
 class ModalConbin(nn.Module):
     def __init__(
@@ -251,7 +272,7 @@ class PackDiaConv1D(nn.Module):
             x = diaConv1D(x)
         return x
 
-class MultiMInformerClf(nn.Module):
+class CateAwareClf(nn.Module):
     '''
     Parameters:
         numcross:denotes the number of cross attention layers
@@ -260,7 +281,6 @@ class MultiMInformerClf(nn.Module):
         cfg: global configuration of parameters
 
     '''
-
     def __init__(
         self,
         numcross,
@@ -268,90 +288,102 @@ class MultiMInformerClf(nn.Module):
         numclass,
         cfg
         ):
-        super(MultiMInformerClf, self).__init__()
-        # nn.Embedding(num_embeddings, embedding_dim, padding_idx
-        # nn.Embedding(**arg, padding_idx=0)
+        super(CateAwareClf, self).__init__()
+
         self._cfg = cfg
-        Embedding = {'NNEemb':nn.Embedding,'Token':TokenEmbLinear}
-        self._embeddings = nn.ModuleList([
-            ModalembProj(
-                [ Embedding[EmbType](**EmbArgs) ],
-                **Others ) 
-            for EmbType,EmbArgs,Others in cfg.embconfig
-        ])
-        self.EmbStepComb = nn.Sequential(
-                # nn.Linear(cfg.d_model*2, 4*cfg.d_model),
-                nn.Conv1d(cfg.d_model*2, 4*cfg.d_model,1),
-                nn.ELU(),
-                nn.Dropout(0.1),
-                # nn.Linear(4*cfg.d_model, cfg.d_model),
-                nn.Conv1d(4*cfg.d_model, cfg.d_model, 1),
-                nn.Dropout(0.1)
-                
-            )
-        self.EmbCombNorm = nn.LayerNorm(cfg.d_model)
 
-        self_encoderCrosses = [[[
-                    CrossLayer(**cfg.SelfAttParameters) for i in range( numcross) ]
-                    for i in range(cfg.numfeats)
-            ]]*2
-        self_encoderConv1Ds = [[[
-                    ConvPoolLayer(**cfg.SelfConvParameters) for i in range( numconv1) ]
-                    for i in range(cfg.numfeats)
-                ]]*2
-        cross_encoderCrosses = [[
-                    CrossLayer(**cfg.CrosAttParameters) for i in range( numcross) ]
-                    for i in range(cfg.totalCross)
-                ]
-        cross_encoderConv1Ds = [[
-                    ConvPoolLayer(**cfg.CrosConvParameters) for i in range( numconv1) ]
-                    for i in range(cfg.totalCross)
-                ]
-        self.PackSelfAttentions = AttEncoders(
-                iscross=False,
-                d_model=cfg.d_model,
-                numselfs=cfg.numfeats,
-                encoderCrosses=self_encoderCrosses[0],
-                encoderConv1Ds=self_encoderConv1Ds[0],
-                numcross=numcross,
-                numconv1=numconv1
-            )
-        self.PackCrosAttentions = nn.ModuleList([
-            AttEncoders(
-                iscross=True,
-                d_model=cfg.d_model,
-                numselfs=cfg.numfeats,
-                encoderCrosses=cross_encoderCrosses,
-                encoderConv1Ds=cross_encoderConv1Ds,
-                numcross=numcross,
-                numconv1=numconv1
-                ) for i in range(len(cfg.CrossPacks))
+        # Embedding = {'NNEemb':nn.Embedding,'Token':TokenEmbLinear}
+        #################CATE NET########################
+        self._c_embeddings = nn.ModuleList([
+            nn.Embedding(**EmbArgs) for EmbArgs in cfg.cate_emb_cfgs
         ])
 
-        self._PackDiaConv1D = nn.ModuleList(
-          [PackDiaConv1D(cfg.dias, cfg.d_model) for i in range( 4)]
-        ) 
+        # embedding interaction
+        self.categorical_att =  CateAtte(
+                d_model = cfg.seq_len,
+                norm_dim = cfg.emb_dim_all,
+                n_heads = 8,
+                factor  = 60,
+                dropout = 0.2,
+                attType = 'prob'
+            )
 
+        self.cates_proj = PosAndProject(
+                embedim = cfg.emb_dim_all*2 ,
+                d_model = cfg.emb_dim_all*2 ,
+                max_len = cfg.seq_len ,
+                kernel_size = cfg.glb_kernel_size ,
+                DEBUG = False
+            )
 
-        # self.PackSelfAttentions_2 = AttEncoders(
-        #         iscross=False,
-        #         d_model=cfg.d_model,
-        #         numselfs=cfg.numfeats,
-        #         encoderCrosses=self_encoderCrosses[1],#on how many used final
-        #         encoderConv1Ds=self_encoderConv1Ds[1],
-        #         numcross=numcross,
-        #         numconv1=numconv1
-        # ) 
+        crosslayers = [CrossLayer(**cfg.CatesAttPara) for i in range( numcross) ]
+        conv1layers = [ConvPoolLayer(**cfg.CatesConvPara) for i in range( numconv1) ]
+        self._self_att = EncoderBlock(
+                    crosslayers = crosslayers,
+                    conv1layers = conv1layers,
+                    numcross = numcross,
+                    numconv1 = numconv1
+            )
 
-        # self.PackCrosCombs = nn.ModuleList([
-        #     ModalConbin(len(comb)) for comb in cfg.combconfig
-        # ])
+        # selfcate_enc_att = [
+        #             [CrossLayer(**cfg.CatesAttPara) for i in range( numcross) ]
+        #     ]
+        # selfcate_enc_conv1D = [[
+        #             ConvPoolLayer(**cfg.CatesConvPara) for i in range( numconv1) ]
+        #         ]
+        # self.CateSelfAttentions = AttEncoders(
+        #         iscross = False,
+        #         d_model = cfg.CatesAttPara['d_model'],#cate_cnt*d_model
+        #         encoderCrosses = selfcate_enc_att,
+        #         encoderConv1Ds = selfcate_enc_conv1D,
+        #         numcross = numcross,
+        #         numconv1 = numconv1
+        #     )
 
-        # self.FinalComb = ModalConbin(cfg.finalComb)
-        self.FinalNorm = nn.BatchNorm1d(cfg.d_model * 12)
+        # #################NUMER NET#######################
+        self._n_embeddings = nn.ModuleList([
+            TokenEmbLinear(**EmbArgs)
+            for EmbArgs,Others in cfg.num_emb_cfgs
+        ])
+
+        # self_enc_att = [
+        #             [CrossLayer(**cfg.NumerAttPara) for i in range( numcross) ]
+        #             for i in range(cfg.numer_feat_cnt)
+        #     ]
+        # self_enc_conv1D = [[
+        #             ConvPoolLayer(**cfg.NumerConvPara) for i in range( numconv1) ]
+        #             for i in range(cfg.numer_feat_cnt)
+        #         ]
+
+        # self.NumerSelfAttentions = AttEncoders(
+        #         iscross = False,
+        #         d_model = cfg.d_model,
+        #         encoderCrosses = self_enc_att,
+        #         encoderConv1Ds = self_enc_conv1D,
+        #         numcross = numcross,
+        #         numconv1 = numconv1
+        #     )
+
+        # finalCross = [[CrossLayer(**cfg.SelfAttParameters) for i in range( numcross)]]
+        # finalCov1D = [[ConvPoolLayer(**cfg.SelfConvParameters) for i in range( numconv1)]]
+
+        # self.FianlAtt = AttEncoders(
+        #         iscross = False,
+        #         d_model = cfg.d_model,
+        #         encoderCrosses = finalCross,
+        #         encoderConv1Ds = finalCov1D,
+        #         numcross = numcross,
+        #         numconv1 = numconv1
+        #      )
+
+        # finalDimBase = cfg.numer_feat_cnt + cfg.cate_feat_cnt
+        finalDimBase = cfg.emb_dim_all*2
+        print(f'[Norm Shape]\n[=================]FinalNorm:{ 3*finalDimBase}')
+        
+        self.FinalNorm = nn.BatchNorm1d(finalDimBase*3)
         self.OutProj = nn.Sequential(
                     # nn.Linear((cfg.d_model*12), 256),
-                    nn.Conv1d((cfg.d_model*12), 256, 1),
+                    nn.Conv1d(finalDimBase*3, 256, 1),
                     nn.ReLU(),
                     nn.Dropout(cfg.global_dropout),
                     # nn.Linear(256, numclass)
@@ -371,46 +403,62 @@ class MultiMInformerClf(nn.Module):
         x_max = torch.max(x,dim=1).values
         score  = torch.cat([x_std, x_mean,x_max], dim=1)
         return score
+#X,  [X_CAT_0, X_CAT_1, X_CAT_2], POS, COR, POS2,ROOM_FQ
+    def forward(
+        self,
+        x_nums,
+        x_cates,
+        # x_pos,
+        # x_cor,
+        # x_cor_pos,
+        # room_od
+    ):###
 
-    def forward(self,x_nums,x_cates):
-        numshape,cateshape = x_nums.shape[-1],x_cates.shape[-1]
-        if len(self._embeddings)!= numshape+cateshape:
-            raise ValueError(f'''Number Embedding Layer not equal to feature dims
-                for numfeats:{numshape+cateshape}''')
+        data_cat = [ ]
+        for i,o in enumerate(x_cates):
+            o = self._c_embeddings[i](o)
+            data_cat.append(o)
+        for i,emb in enumerate(self._n_embeddings):
+            data_cat.append(emb(x_nums[:,:,i]))
+        data_cat = torch.cat(data_cat,dim=-1)
+        # print(f'''DEBUG CATE [Input shape]
+        #     [======================]CAT CATE EMBEDDINGS:{data_cat.shape}''')
+        data_cat = torch.cat(
+            [self.categorical_att(data_cat),data_cat],
+            dim = -1
+            )
 
-        data = [ ]
-        for n, Embedding in enumerate(self._embeddings):
-            if n < numshape:
-                e = Embedding(x_nums[:, :, n]) # 256|512/2
-            else:
-                e = Embedding(x_cates[:, :, n-numshape])
-            data.append(e)
-
-        if self._cfg.CombMode == 'embedding_step':
-            embstep_comb = []
-            for comb in self._cfg.combconfig:
-                o = torch.cat([data[idx] for idx in comb], dim=-1)
-                o = self.EmbCombNorm(
-                        self.EmbStepComb(
-                            o.permute(0,2,1)
-                            ).transpose(1,2)
-                        )
-                embstep_comb.append(o)
-            data = [data[c] for c in self._cfg.NoneCombidx]
-            data.extend(embstep_comb)
-        data = self.PackSelfAttentions(data)# 64|256/4
-        Combs = []
-        for comb, encoder in zip(self._cfg.CrossPacks, self.PackCrosAttentions):
-            Combs.append(encoder([data[c] for c in comb]))
-        usedCrosId = [c[0] for c in self._cfg.CrossPacks]
-        for i, o in zip(usedCrosId, Combs):
-            data[i] = o
-        data = [diaConv1D(o) for diaConv1D,o in zip(self._PackDiaConv1D, data)]
-        # data = [conv(o) for conv, o in zip(self.PackConvLayer, data)] #5 for pack|4
-        data = torch.cat([self._pooling(o) for o in data], dim=1)#3*5 |3*4
-        data = self.FinalNorm(data)
-        data = self.OutProj(data.unsqueeze(-1)).squeeze(-1)#conv1d proj
-        return F.sigmoid(data)
+        # print(f'''DEBUG CATE [OutPut shape]
+        #     [======================]ATT CATE EMBEDDINGS:{data_cat.shape}''')
+        data_cat = self.cates_proj(data_cat)
+        # print(f'''DEBUG CATE [OutPut shape]
+        #     [======================]PROJ CATE-ATT:{data_cat.shape}''')
         
+        data_cat = self._self_att(data_cat, data_cat)
+        data_cat = self._pooling(data_cat)
+        # data_cat = self.CateSelfAttentions([data_cat])[0]
+        # print(f'''DEBUG CATE [OutPut shape]
+        #     [======================]ATT CATE-SEQ:{data_cat.shape}''')
+        # x_nums:Tensor
+        # # x_nums _n_emb_andProj
+        # data = []
+        # for i,emb in enumerate(self._n_emb_andProj):
+        #     data.append(emb(x_nums[:,:,i]))
 
-
+        # data = self.NumerSelfAttentions(data)# 64|256/4
+        # for i in range(self._cfg.cate_feat_cnt):
+        #     data.append(data_cat[:,:,
+        #             i*self._cfg.d_model:(i+1)*self._cfg.d_model ]
+        #       )
+        # numconcat = len(data)
+        # data = torch.cat(data, dim=-2)
+        # data = self.FianlAtt([data])[0]#list inout==>list output==1
+        
+        # seqlen = data.shape[1]//numconcat
+        # data = [data[:, o*seqlen:(o+1)*seqlen, :] for o in range(numconcat-1)] + [data[:,(numconcat-1)*seqlen:,:]]
+        # # room_od = self._room_fq_pos(room_od)
+        # data = torch.cat([self._pooling(o) for o in data] , dim=1)
+        #     # + [self._pooling(room_od)], dim=1)
+        data_cat = self.FinalNorm(data_cat)
+        data_cat = self.OutProj(data_cat.unsqueeze(-1)).squeeze(-1)
+        return F.sigmoid(data_cat)
