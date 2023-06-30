@@ -315,6 +315,13 @@ class CateAwareClf(nn.Module):
                 kernel_size = cfg.glb_kernel_size ,
                 DEBUG = False
             )
+        # self.cates_proj = PosAndProject(
+        #         embedim = cfg.emb_dim_all,
+        #         d_model = cfg.emb_dim_all ,
+        #         max_len = cfg.seq_len ,
+        #         kernel_size = cfg.glb_kernel_size ,
+        #         DEBUG = False
+        #     )
 
         crosslayers = [CrossLayer(**cfg.CatesAttPara) for i in range( numcross) ]
         conv1layers = [ConvPoolLayer(**cfg.CatesConvPara) for i in range( numconv1) ]
@@ -378,6 +385,7 @@ class CateAwareClf(nn.Module):
 
         # finalDimBase = cfg.numer_feat_cnt + cfg.cate_feat_cnt
         finalDimBase = cfg.emb_dim_all*2
+        # finalDimBase = cfg.emb_dim_all
         print(f'[Norm Shape]\n[=================]FinalNorm:{ 3*finalDimBase}')
         
         self.FinalNorm = nn.BatchNorm1d(finalDimBase*3)
@@ -423,6 +431,7 @@ class CateAwareClf(nn.Module):
         data_cat = torch.cat(data_cat,dim=-1)
         # print(f'''DEBUG CATE [Input shape]
         #     [======================]CAT CATE EMBEDDINGS:{data_cat.shape}''')
+        #compare no categorical
         data_cat = torch.cat(
             [self.categorical_att(data_cat),data_cat],
             dim = -1
