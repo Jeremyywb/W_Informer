@@ -304,7 +304,7 @@ class CateAwareClf(nn.Module):
         # embedding interaction
         self.categorical_att =  CateAtte(
                 d_model = cfg.seq_len,
-                norm_dim = cfg.emb_dim_all,
+                norm_dim = cfg.seq_len,
                 n_heads = 8,
                 factor  = 60,
                 dropout = 0.2,
