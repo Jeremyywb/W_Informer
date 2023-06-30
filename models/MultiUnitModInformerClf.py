@@ -93,7 +93,7 @@ class CateAtte(nn.Module):
                     x, x, x,
                     attn_mask=cross_mask )[0]
             )
-        return self.norm1(x.transpose(1,2))
+        return self.norm1(x).transpose(1,2)
 
 
 class EncoderBlock(nn.Module):
@@ -102,6 +102,7 @@ class EncoderBlock(nn.Module):
         self, 
         crosslayers=None,
         conv1layers=None,
+        d_model=512,
         numcross:int=3,
         numconv1:int=2,
         ):
@@ -112,6 +113,7 @@ class EncoderBlock(nn.Module):
         self._numcross = numcross
         self._numconv1 = numconv1
         self._crossList = nn.ModuleList(crosslayers)
+        self.last_extro_norm = nn.LayerNorm(d_model)
         if conv1layers is None:
             self._conv1List = [None]*len( self._crossList )
         else:
@@ -124,7 +126,7 @@ class EncoderBlock(nn.Module):
             x = encoder(x,cross)
             if conv1D is not None:
                 x = conv1D(x)
-        return x
+        return self.last_extro_norm(x)
 
 class AttEncoders(nn.Module):
     def __init__(
@@ -142,6 +144,7 @@ class AttEncoders(nn.Module):
             EncoderBlock(
                 crosslayers=crosslayers,
                 conv1layers=conv1layers,
+                d_model = d_model,
                 numcross=numcross,
                 numconv1=numconv1,
                 )
@@ -328,6 +331,7 @@ class CateAwareClf(nn.Module):
         self._self_att = EncoderBlock(
                     crosslayers = crosslayers,
                     conv1layers = conv1layers,
+                    d_model = cfg.CatesAttPara['d_model'],
                     numcross = numcross,
                     numconv1 = numconv1
             )
@@ -424,10 +428,19 @@ class CateAwareClf(nn.Module):
 
         data_cat = [ ]
         for i,o in enumerate(x_cates):
+            # print(f'''DEBUG CATE [Input shape]
+            # [======================]CATE EMBEDDINGS:{o.shape}''')
             o = self._c_embeddings[i](o)
+            # print(f'''DEBUG CATE [OutPut shape]
+            # [======================]CATE EMBEDDINGS:{o.shape}''')
             data_cat.append(o)
         for i,emb in enumerate(self._n_embeddings):
-            data_cat.append(emb(x_nums[:,:,i]))
+            # print(f'''DEBUG Numer [Input shape]
+            # [======================]Numer EMBEDDINGS:{x_nums[:,:,i].shape}''')
+            ebed = emb(x_nums[:,:,i])
+            # print(f'''DEBUG Numer [Input shape]
+            # [======================]Numer EMBEDDINGS:{ebed.shape}''')
+            data_cat.append(ebed)
         data_cat = torch.cat(data_cat,dim=-1)
         # print(f'''DEBUG CATE [Input shape]
         #     [======================]CAT CATE EMBEDDINGS:{data_cat.shape}''')
