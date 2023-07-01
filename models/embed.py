@@ -418,3 +418,18 @@ class PosAndProject(nn.Module):
         x = self._con1D(x)
         x = x + self._pos_embed(x,postye='self') #(bs,seq,d_model)
         return self._dropout( self.layernorm_embedding(x))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

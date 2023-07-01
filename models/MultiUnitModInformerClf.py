@@ -84,7 +84,7 @@ class CateAtte(nn.Module):
             )
 
         self.dropout = nn.Dropout(dropout)
-        self.norm1 = nn.BatchNorm1d(norm_dim)
+        self.norm1 = nn.LayerNorm(norm_dim)
     def forward(self, x, x_mask=None, cross_mask=None):
         # namask = torch.isnan(x)
         x = x.permute(0,2,1)
@@ -93,7 +93,7 @@ class CateAtte(nn.Module):
                     x, x, x,
                     attn_mask=cross_mask )[0]
             )
-        return self.norm1(x).transpose(1,2)
+        return self.norm1(x.transpose(1,2))
 
 
 class EncoderBlock(nn.Module):
@@ -297,27 +297,38 @@ class CateAwareClf(nn.Module):
 
         # Embedding = {'NNEemb':nn.Embedding,'Token':TokenEmbLinear}
         #################CATE NET########################
-        self._c_embeddings = nn.ModuleList([
+        self._c1_embeddings = nn.ModuleList([
+            nn.Embedding(**EmbArgs) for EmbArgs in cfg.cate_emb_cfgs
+        ])
+        
+        self._c2_embeddings = nn.ModuleList([
             nn.Embedding(**EmbArgs) for EmbArgs in cfg.cate_emb_cfgs
         ])
 
         # embedding interaction
-        self.categorical_att =  CateAtte(
-                d_model = cfg.seq_len,
+        self.categorical_att =  nn.ModuleList([
+            CateAtte(
+                d_model = seq_len,
                 norm_dim = cfg.emb_dim_all,
                 n_heads = 8,
                 factor  = 60,
                 dropout = 0.2,
                 attType = 'prob'
-            )
+            ) for seq_len in [cfg.long_term,cfg.short_term]
+        ])
 
-        self.cates_proj = PosAndProject(
-                embedim = cfg.emb_dim_all*2 ,
-                d_model = cfg.emb_dim_all*2 ,
-                max_len = cfg.seq_len ,
+
+        self.cates_proj =  nn.ModuleList([
+            PosAndProject(
+                embedim = cfg.emb_dim_all ,#seperate proj
+                d_model = cfg.emb_dim_all ,
+                max_len = seq_len,
                 kernel_size = cfg.glb_kernel_size ,
                 DEBUG = False
-            )
+            ) for seq_len in [cfg.long_term,cfg.long_term,cfg.short_term,cfg.short_term]
+            #long term num,long term cate,short term num,short term cate,
+        ])
+      
         # self.cates_proj = PosAndProject(
         #         embedim = cfg.emb_dim_all,
         #         d_model = cfg.emb_dim_all ,
@@ -326,11 +337,21 @@ class CateAwareClf(nn.Module):
         #         DEBUG = False
         #     )
 
-        crosslayers = [CrossLayer(**cfg.CatesAttPara) for i in range( numcross) ]
-        conv1layers = [ConvPoolLayer(**cfg.CatesConvPara) for i in range( numconv1) ]
-        self._self_att = EncoderBlock(
-                    crosslayers = crosslayers,
-                    conv1layers = conv1layers,
+        L_crosslayers = [CrossLayer(**cfg.CatesAttPara) for i in range( numcross) ]
+        L_conv1layers = [ConvPoolLayer(**cfg.CatesConvPara) for i in range( numconv1) ]
+        S_crosslayers = [CrossLayer(**cfg.CatesAttPara) for i in range( numcross) ]
+        S_conv1layers = [ConvPoolLayer(**cfg.CatesConvPara) for i in range( numconv1) ]
+        self.L_self_att = EncoderBlock(
+                    crosslayers = L_crosslayers,
+                    conv1layers = L_conv1layers,
+                    d_model = cfg.CatesAttPara['d_model'],
+                    numcross = numcross,
+                    numconv1 = numconv1
+            )
+        
+        self.S_self_att = EncoderBlock(
+                    crosslayers = S_crosslayers,
+                    conv1layers = S_conv1layers,
                     d_model = cfg.CatesAttPara['d_model'],
                     numcross = numcross,
                     numconv1 = numconv1
@@ -352,7 +373,11 @@ class CateAwareClf(nn.Module):
         #     )
 
         # #################NUMER NET#######################
-        self._n_embeddings = nn.ModuleList([
+        self.L_n_embeddings = nn.ModuleList([
+            TokenEmbLinear(**EmbArgs)
+            for EmbArgs,Others in cfg.num_emb_cfgs
+        ])
+        self.S_n_embeddings = nn.ModuleList([
             TokenEmbLinear(**EmbArgs)
             for EmbArgs,Others in cfg.num_emb_cfgs
         ])
@@ -388,7 +413,7 @@ class CateAwareClf(nn.Module):
         #      )
 
         # finalDimBase = cfg.numer_feat_cnt + cfg.cate_feat_cnt
-        finalDimBase = cfg.emb_dim_all*2
+        finalDimBase = cfg.emb_dim_all*2*2
         # finalDimBase = cfg.emb_dim_all
         print(f'[Norm Shape]\n[=================]FinalNorm:{ 3*finalDimBase}')
         
@@ -426,63 +451,56 @@ class CateAwareClf(nn.Module):
         # room_od
     ):###
 
-        data_cat = [ ]
-        for i,o in enumerate(x_cates):
+        L_data = [ ]
+        S_data = [ ]
+        for L_emb,S_emb,L_o,S_o in zip(
+                        self._c1_embeddings,
+                        self._c2_embeddings,
+                        x_cates[0],
+                        x_cates[1]
+                        ):
             # print(f'''DEBUG CATE [Input shape]
             # [======================]CATE EMBEDDINGS:{o.shape}''')
-            o = self._c_embeddings[i](o)
+            L_o = L_emb(L_o)
+            S_o = S_emb(S_o)
             # print(f'''DEBUG CATE [OutPut shape]
             # [======================]CATE EMBEDDINGS:{o.shape}''')
-            data_cat.append(o)
-        for i,emb in enumerate(self._n_embeddings):
+            L_data.append(L_o)
+            S_data.append(L_o)
+        for i in range(len(self.L_n_embeddings)):
+            L_NE = self.L_n_embeddings[i]( x_nums[0][:,:,i] )
+            S_NE = self.S_n_embeddings[i]( x_nums[1][:,:,i] )
+            L_data.append(L_NE)
+            S_data.append(S_NE)
+
             # print(f'''DEBUG Numer [Input shape]
             # [======================]Numer EMBEDDINGS:{x_nums[:,:,i].shape}''')
-            ebed = emb(x_nums[:,:,i])
             # print(f'''DEBUG Numer [Input shape]
             # [======================]Numer EMBEDDINGS:{ebed.shape}''')
-            data_cat.append(ebed)
-        data_cat = torch.cat(data_cat,dim=-1)
+            # data.append(ebed)
+        L_data = torch.cat(L_data,dim=-1)
+        S_data = torch.cat(S_data,dim=-1)
         # print(f'''DEBUG CATE [Input shape]
-        #     [======================]CAT CATE EMBEDDINGS:{data_cat.shape}''')
+        #     [======================]CAT CATE EMBEDDINGS:{data.shape}''')
         #compare no categorical
-        data_cat = torch.cat(
-            [self.categorical_att(data_cat),data_cat],
-            dim = -1
-            )
+        L_o_att = self.categorical_att[0](L_data)
+        S_o_att = self.categorical_att[1](S_data)
+ 
+        # print(f'''DEBUG CATE [OutPut shape]
+        #     [======================]ATT CATE EMBEDDINGS:{data.shape}''')
+        L_data = self.cates_proj[0](L_data)
+        L_o_att = self.cates_proj[1](L_o_att)
+        S_data = self.cates_proj[2](S_data)
+        S_o_att = self.cates_proj[3](S_o_att)
+        # print(f'''DEBUG CATE [OutPut shape]
+        #     [======================]PROJ CATE-ATT:{data.shape}''')
+        L_data = torch.cat([L_data,L_o_att],dim=-1)#attention together
+        S_data = torch.cat([S_data,S_o_att],dim=-1)#attention together
+        L_data = self.L_self_att(L_data, L_data)
+        S_data = self.S_self_att(S_data, S_data)
 
-        # print(f'''DEBUG CATE [OutPut shape]
-        #     [======================]ATT CATE EMBEDDINGS:{data_cat.shape}''')
-        data_cat = self.cates_proj(data_cat)
-        # print(f'''DEBUG CATE [OutPut shape]
-        #     [======================]PROJ CATE-ATT:{data_cat.shape}''')
-        
-        data_cat = self._self_att(data_cat, data_cat)
-        d_model_each = data_cat.shape[2]//2
-        sep_1,sep_2 = data_cat[:,:,:d_model_each],data_cat[:,:,d_model_each:]
-        data_cat = torch.cat( [self._pooling(sep_1),self._pooling(sep_2)],dim=1)
-        # data_cat = self.CateSelfAttentions([data_cat])[0]
-        # print(f'''DEBUG CATE [OutPut shape]
-        #     [======================]ATT CATE-SEQ:{data_cat.shape}''')
-        # x_nums:Tensor
-        # # x_nums _n_emb_andProj
-        # data = []
-        # for i,emb in enumerate(self._n_emb_andProj):
-        #     data.append(emb(x_nums[:,:,i]))
+        L_data = torch.cat([self._pooling(L_data),self._pooling(S_data)],dim=1)
 
-        # data = self.NumerSelfAttentions(data)# 64|256/4
-        # for i in range(self._cfg.cate_feat_cnt):
-        #     data.append(data_cat[:,:,
-        #             i*self._cfg.d_model:(i+1)*self._cfg.d_model ]
-        #       )
-        # numconcat = len(data)
-        # data = torch.cat(data, dim=-2)
-        # data = self.FianlAtt([data])[0]#list inout==>list output==1
-        
-        # seqlen = data.shape[1]//numconcat
-        # data = [data[:, o*seqlen:(o+1)*seqlen, :] for o in range(numconcat-1)] + [data[:,(numconcat-1)*seqlen:,:]]
-        # # room_od = self._room_fq_pos(room_od)
-        # data = torch.cat([self._pooling(o) for o in data] , dim=1)
-        #     # + [self._pooling(room_od)], dim=1)
-        data_cat = self.FinalNorm(data_cat)
-        data_cat = self.OutProj(data_cat.unsqueeze(-1)).squeeze(-1)
-        return F.sigmoid(data_cat)
+        L_data = self.FinalNorm(L_data)
+        L_data = self.OutProj(L_data.unsqueeze(-1)).squeeze(-1)
+        return F.sigmoid(L_data)
