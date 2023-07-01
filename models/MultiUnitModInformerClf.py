@@ -84,7 +84,7 @@ class CateAtte(nn.Module):
             )
 
         self.dropout = nn.Dropout(dropout)
-        self.norm1 = nn.LayerNorm(norm_dim)
+        self.norm1 = nn.BatchNorm1d(norm_dim)
     def forward(self, x, x_mask=None, cross_mask=None):
         # namask = torch.isnan(x)
         x = x.permute(0,2,1)
@@ -304,7 +304,7 @@ class CateAwareClf(nn.Module):
         # embedding interaction
         self.categorical_att =  CateAtte(
                 d_model = cfg.seq_len,
-                norm_dim = cfg.seq_len,
+                norm_dim = cfg.emb_dim_all,
                 n_heads = 8,
                 factor  = 60,
                 dropout = 0.2,
@@ -457,7 +457,9 @@ class CateAwareClf(nn.Module):
         #     [======================]PROJ CATE-ATT:{data_cat.shape}''')
         
         data_cat = self._self_att(data_cat, data_cat)
-        data_cat = self._pooling(data_cat)
+        d_model_each = data_cat.shape[2]//2
+        sep_1,sep_2 = data_cat[:,:,:d_model_each],data_cat[:,:,d_model_each:]
+        data_cat = torch.cat( [self._pooling(sep_1),self._pooling(sep_2)],dim=1)
         # data_cat = self.CateSelfAttentions([data_cat])[0]
         # print(f'''DEBUG CATE [OutPut shape]
         #     [======================]ATT CATE-SEQ:{data_cat.shape}''')
