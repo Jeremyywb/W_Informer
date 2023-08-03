@@ -182,3 +182,5 @@ class History(object):
             self._samples_seen * self._epoch_loss + batch_size * logs["loss"]
         ) / (self._samples_seen + batch_size)
         self._samples_seen += batch_size
+
+

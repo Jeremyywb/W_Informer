@@ -413,7 +413,7 @@ class CateAwareClf(nn.Module):
         #      )
 
         # finalDimBase = cfg.numer_feat_cnt + cfg.cate_feat_cnt
-        finalDimBase = cfg.emb_dim_all*2*2
+        finalDimBase = cfg.emb_dim_all*2
         # finalDimBase = cfg.emb_dim_all
         print(f'[Norm Shape]\n[=================]FinalNorm:{ 3*finalDimBase}')
         
@@ -440,6 +440,8 @@ class CateAwareClf(nn.Module):
         x_max = torch.max(x,dim=1).values
         score  = torch.cat([x_std, x_mean,x_max], dim=1)
         return score
+
+
 #X,  [X_CAT_0, X_CAT_1, X_CAT_2], POS, COR, POS2,ROOM_FQ
     def forward(
         self,
@@ -466,7 +468,7 @@ class CateAwareClf(nn.Module):
             # print(f'''DEBUG CATE [OutPut shape]
             # [======================]CATE EMBEDDINGS:{o.shape}''')
             L_data.append(L_o)
-            S_data.append(L_o)
+            S_data.append(S_o)
         for i in range(len(self.L_n_embeddings)):
             L_NE = self.L_n_embeddings[i]( x_nums[0][:,:,i] )
             S_NE = self.S_n_embeddings[i]( x_nums[1][:,:,i] )
@@ -483,20 +485,20 @@ class CateAwareClf(nn.Module):
         # print(f'''DEBUG CATE [Input shape]
         #     [======================]CAT CATE EMBEDDINGS:{data.shape}''')
         #compare no categorical
-        L_o_att = self.categorical_att[0](L_data)
-        S_o_att = self.categorical_att[1](S_data)
+        # L_o_att = self.categorical_att[0](L_data)
+        # S_o_att = self.categorical_att[1](S_data)
  
         # print(f'''DEBUG CATE [OutPut shape]
         #     [======================]ATT CATE EMBEDDINGS:{data.shape}''')
         L_data = self.cates_proj[0](L_data)
-        L_o_att = self.cates_proj[1](L_o_att)
+        # L_o_att = self.cates_proj[1](L_o_att)
         S_data = self.cates_proj[2](S_data)
-        S_o_att = self.cates_proj[3](S_o_att)
+        # S_o_att = self.cates_proj[3](S_o_att)
         # print(f'''DEBUG CATE [OutPut shape]
         #     [======================]PROJ CATE-ATT:{data.shape}''')
-        L_data = torch.cat([L_data,L_o_att],dim=-1)#attention together
-        S_data = torch.cat([S_data,S_o_att],dim=-1)#attention together
-        L_data = self.L_self_att(L_data, L_data)
+        # L_data = torch.cat([L_data,L_o_att],dim=-1)#attention together
+        # S_data = torch.cat([S_data,S_o_att],dim=-1)#attention together
+        L_data = self.L_self_att(L_data, L_data)#/2
         S_data = self.S_self_att(S_data, S_data)
 
         L_data = torch.cat([self._pooling(L_data),self._pooling(S_data)],dim=1)

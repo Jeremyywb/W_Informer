@@ -22,6 +22,7 @@ class torchModel(object):
       model=None,
       cfg=None,
       CheckpointPath:str='None',
+      Save_name = None,
       logPath:str='None',
       logfile:str="None",
       num_checkpoints:int=10
@@ -31,6 +32,7 @@ class torchModel(object):
         super(torchModel, self).__init__()
         self._model = model
         self._cfg = cfg
+        self.Save_name = Save_name
         self._CheckpointPath = CheckpointPath
         self._logPath = logPath
         self._logfile = logfile
@@ -118,7 +120,7 @@ class torchModel(object):
                     self._early_stopping.score,
                     self._early_stopping._best_score,
                     self._CheckpointPath,
-                    'OneFOldBest'
+                    self.Save_name
 
                     ) 
                 break
@@ -198,5 +200,4 @@ class torchModel(object):
         raise NotImplementedError()
     def predict(self,batch):
         raise NotImplementedError()
-
 
