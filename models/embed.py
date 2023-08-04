@@ -419,33 +419,3 @@ class PosAndProject(nn.Module):
         x = x + self._pos_embed(x,postye='self') #(bs,seq,d_model)
         return self._dropout( self.layernorm_embedding(x))
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-np_labels = np.load(
-                "/kaggle/input/train-targets-top500/train_targets_top500.npy")
-MAIN_DIR = "/kaggle/input/cafa-5-protein-function-prediction"
-train_labels_path = MAIN_DIR + "/Train/train_terms.tsv"
-labels = pd.read_csv(train_labels_path, sep = "\t")
-top_terms = labels.groupby("term")["EntryID"].count().sort_values(ascending=False)
-labels_names = top_terms[:500].index.values
-labels[labels.EntryID== 'A0A009IHW8'].term.values
-labels_names[np_labels[0]==1]
-np_labels[0]
-embeds_map = {
-    "T5" : "t5embeds",
-    "ProtBERT" : "protbert-embeddings-for-cafa5",
-    "EMS2" : "cafa-5-ems-2-embeddings-numpy"
-}
-ids = np.load("/kaggle/input/"+embeds_map['ProtBERT']+"/"+'train'+"_ids.npy")

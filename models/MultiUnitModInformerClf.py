@@ -506,3 +506,5 @@ class CateAwareClf(nn.Module):
         L_data = self.FinalNorm(L_data)
         L_data = self.OutProj(L_data.unsqueeze(-1)).squeeze(-1)
         return F.sigmoid(L_data)
+
+

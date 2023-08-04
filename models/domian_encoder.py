@@ -8,6 +8,7 @@ from itertools import islice
 import torch.nn as nn
 import torch
 
+
 class CrossLayer(nn.Module):
     def __init__(
         self, 

@@ -83,40 +83,40 @@ def get_model():
         )
     return model 
 
-cfg = CFGRegresor()
+# cfg = CFGRegresor()
 
-cfg.BATCH_SIZE = 128
+# cfg.BATCH_SIZE = 128
 
-IFMRegressor = get_model().to( cfg.DEVICE )
-dataset  = Datset(data= train_rnd_sam )
-train_loader = DataLoader(dataset,batch_size= cfg.BATCH_SIZE,shuffle=True,collate_fn=None)
-dataset2  = Datset(valid_rnd_sam )
-valid_loader = DataLoader(dataset2,batch_size= cfg.BATCH_SIZE,shuffle=True,collate_fn=None)
-
-
-args = {'early_stopping_metric' : cfg.EARLY_STOP_METRICS,
-'patience' : 8,
-'verbose' : True,
-'max_minze' : True,
-'delta' : 0.0005}
+# IFMRegressor = get_model().to( cfg.DEVICE )
+# dataset  = Datset(data= train_rnd_sam )
+# train_loader = DataLoader(dataset,batch_size= cfg.BATCH_SIZE,shuffle=True,collate_fn=None)
+# dataset2  = Datset(valid_rnd_sam )
+# valid_loader = DataLoader(dataset2,batch_size= cfg.BATCH_SIZE,shuffle=True,collate_fn=None)
 
 
-google_root = '/content/sample_data/'
-cache_root = '/kaggle/working/'
-ckg_p = cache_root + 'checkPoint'
-log_p = cache_root + 'log'
+# args = {'early_stopping_metric' : cfg.EARLY_STOP_METRICS,
+# 'patience' : 8,
+# 'verbose' : True,
+# 'max_minze' : True,
+# 'delta' : 0.0005}
 
 
-earlystopping = EarlyStopping(**args)
-TRAINER = trainModel(IFMRegressor,cfg,ckg_p,log_p,'IFMRegressorTrain',20)
-TRAINER.compile(
-      loss=torch.nn.BCELoss(),
-      optimizer=optim.Adam,
-      lr=1e-3,
-      eval_metrics=cfg.EVAL_METRICS,
-      early_stopping=earlystopping,
-      verbose=1)
-TRAINER.fit(train_loader,valid_loader,epochs=50)
+# google_root = '/content/sample_data/'
+# cache_root = '/kaggle/working/'
+# ckg_p = cache_root + 'checkPoint'
+# log_p = cache_root + 'log'
+
+
+# earlystopping = EarlyStopping(**args)
+# TRAINER = trainModel(IFMRegressor,cfg,ckg_p,log_p,'IFMRegressorTrain',20)
+# TRAINER.compile(
+#       loss=torch.nn.BCELoss(),
+#       optimizer=optim.Adam,
+#       lr=1e-3,
+#       eval_metrics=cfg.EVAL_METRICS,
+#       early_stopping=earlystopping,
+#       verbose=1)
+# TRAINER.fit(train_loader,valid_loader,epochs=50)
 
 
           
