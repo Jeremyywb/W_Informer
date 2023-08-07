@@ -11,7 +11,8 @@ import torch
 
 class CrossLayer(nn.Module):
     def __init__(
-        self, 
+        self,
+        mask_flag,
         d_model, 
         d_ff=None,
         n_heads=6,
@@ -25,7 +26,7 @@ class CrossLayer(nn.Module):
         d_ff = d_ff or 4*d_model
         ATT = FullAttention if attType=='full' else ProbAttention
         self._crossLayer = AttentionLayer(
-                ATT(False,factor, 
+                ATT(mask_flag,factor, 
                     attention_dropout=dropout, 
                     output_attention=False), 
                 d_model, 
@@ -68,6 +69,7 @@ class EncoderBlock(nn.Module):
     """docstring for SelfAttBlock"""
     def __init__(
         self, 
+        mask_flag,
         crosslayers=None,
         conv1layers=None,
         d_model=512,
@@ -80,6 +82,7 @@ class EncoderBlock(nn.Module):
                         ->numcross:{numcross} should greater than numconv1 + 1''')
         self._numcross = numcross
         self._numconv1 = numconv1
+        self.mask_flag = mask_flag
         self._crossList = nn.ModuleList(crosslayers)
         self.last_extro_norm = nn.LayerNorm(d_model)
         if conv1layers is None:
@@ -89,9 +92,12 @@ class EncoderBlock(nn.Module):
             for i in range(numcross-numconv1):
                 self._conv1List.append(None)
 
-    def forward(self,x,cross):
+    def forward(self,x,cross, cross_mask=None):
         for encoder,conv1D in zip(self._crossList, self._conv1List ):
-            x = encoder(x,cross)
+            if self.mask_flag:
+                x = encoder(x, cross, cross_mask = cross_mask)
+            else:
+                x = encoder(x, cross)
             if conv1D is not None:
                 x = conv1D(x)
         return self.last_extro_norm(x)
@@ -113,6 +119,7 @@ class PromptAwareEncoder(nn.Module):
     '''
     def __init__(
         self,
+        mask_flag,
         numcross,
         numconv1,
         d_model,
@@ -120,10 +127,11 @@ class PromptAwareEncoder(nn.Module):
         downConvPara,
         ):
         super(PromptAwareEncoder, self).__init__()
-
+        self.mask_flag = mask_flag
         _attlayers = [CrossLayer(**attParameter) for i in range( numcross) ]
         _downconvs = [ConvPoolLayer(**downConvPara) for i in range( numconv1) ]
         self.encoder = EncoderBlock(
+                    mask_flag = mask_flag,
                     crosslayers = _attlayers,
                     conv1layers = _downconvs,
                     d_model = d_model,
@@ -135,6 +143,7 @@ class PromptAwareEncoder(nn.Module):
         self,
         x,
         o,
+        cross_mask = None
     ):
 
-        return self.encoder(x,o)
+        return self.encoder(x,o,cross_mask)

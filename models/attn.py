@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import sys
 import numpy as np
 
 from math import sqrt
@@ -25,9 +25,23 @@ class FullAttention(nn.Module):
         if self.mask_flag:
             if attn_mask is None:
                 attn_mask = TriangularCausalMask(B, L, device=queries.device)
-
-            scores.masked_fill_(attn_mask.mask, -np.inf)
+#             extended_attention_mask = attn_mask.unsqueeze(1).unsqueeze(2)
+#             attn_mask = extended_attention_mask * extended_attention_mask.squeeze(-2).unsqueeze(-1)
+            
+            # attn_mask = attn_mask.unsqueeze(1).unsqueeze(2)
+#             attn_mask = attn_mask.unsqueeze(1).unsqueeze(-1).expand(-1,H,-1,S)
+            
+#             print('input mask:',attn_mask)
+#             attn_mask = ~(attn_mask.to(torch.bool))
+#             print('expend mask:',attn_mask)
+#             print('input score:',scores)
+            scores.masked_fill_(attn_mask, -np.inf)
+            # print('masked_fill_ score:',scores)
+        
+            # scores.masked_fill_(attn_mask.mask, -np.inf)
         A = torch.softmax(scale * scores, dim=-1)
+        # print('A',A)
+        # sys.exit(0)
         A = self.dropout( A )
         # print(scores )
         # V = torch.einsum("bhls,bshd->blhd", torch.nan_to_num(A,0), torch.nan_to_num(values,0 ))
