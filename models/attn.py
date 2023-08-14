@@ -25,20 +25,15 @@ class FullAttention(nn.Module):
         if self.mask_flag:
             if attn_mask is None:
                 attn_mask = TriangularCausalMask(B, L, device=queries.device)
-#             extended_attention_mask = attn_mask.unsqueeze(1).unsqueeze(2)
-#             attn_mask = extended_attention_mask * extended_attention_mask.squeeze(-2).unsqueeze(-1)
-            
-            # attn_mask = attn_mask.unsqueeze(1).unsqueeze(2)
-#             attn_mask = attn_mask.unsqueeze(1).unsqueeze(-1).expand(-1,H,-1,S)
-            
-#             print('input mask:',attn_mask)
-#             attn_mask = ~(attn_mask.to(torch.bool))
-#             print('expend mask:',attn_mask)
-#             print('input score:',scores)
             scores.masked_fill_(attn_mask, -np.inf)
+
             # print('masked_fill_ score:',scores)
         
             # scores.masked_fill_(attn_mask.mask, -np.inf)
+        if attn_mask is not None:
+            attn_mask = attn_mask.unsqueeze(1).unsqueeze(2)#B,S
+            attn_mask = attn_mask.repeat(1,H,L,1)#bhls
+            scores.masked_fill_(attn_mask, -np.inf)
         A = torch.softmax(scale * scores, dim=-1)
         # print('A',A)
         # sys.exit(0)
@@ -142,6 +137,8 @@ class ProbAttention(nn.Module):
         return context.transpose(2,1).contiguous(), attn
 
 
+
+
 class AttentionLayer(nn.Module):
     def __init__(self, attention, d_model, n_heads, 
                  d_keys=None, d_values=None, mix=False,DEBUG=False):
@@ -239,3 +236,51 @@ class AttLayerSeqMask(nn.Module):
 
 
 
+# import torch
+
+# # mask
+# mask = torch.tensor([[0, 1, 1, 0, 0],
+#                      [1, 1, 0, 0, 0],
+#                      [1, 0, 0, 0, 0]])
+
+# # 创建与 mask 相同 shape 的索引张量
+# index_tensor = torch.arange(mask.size(1)).unsqueeze(0).expand_as(mask)+1
+# print(index_tensor)
+# # 将 index_tensor 与 mask 相乘
+# index_tensor = index_tensor * mask
+# print(index_tensor)
+# # 对 index_tensor 进行排序
+# sorted_indices, indices = torch.sort(index_tensor, dim=1,descending =True)
+# print(sorted_indices)
+# # 根据每行 mask 的和的最大值，截取索引
+# max_length = mask.sum(dim=1).max().item()
+# result = sorted_indices[:, :max_length]
+# result = result - 1
+
+# result_mask_value = 512
+# result_mask = result==-1
+# result.masked_fill_(result_mask,512)
+# print(result)
+
+
+
+
+
+
+
+
+
+# import torch
+
+# # 源张量
+# source_tensor = torch.randn(3, 9, 8)
+
+# # 处理好的索引 mask
+# index_mask = torch.tensor([[2, 1],
+#                            [1, 0],
+#                            [0, 8]])
+
+# # 使用 torch.gather 从源张量中提取值
+# gathered_result = torch.gather(source_tensor, dim=1, index=index_mask.unsqueeze(-1).expand(-1, -1, source_tensor.size(-1)))
+
+# print(gathered_result)
