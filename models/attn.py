@@ -96,6 +96,10 @@ class ProbAttention(nn.Module):
         if self.mask_flag:
             attn_mask = ProbMask(B, H, L_Q, index, scores, device=V.device)
             scores.masked_fill_(attn_mask.mask, -np.inf)
+        if attn_mask is not None:
+            attn_mask = attn_mask.unsqueeze(1).unsqueeze(2)#B,S
+            attn_mask = attn_mask.repeat(1,H,L_V,1)#bhls
+            scores.masked_fill_(attn_mask, -np.inf)
 
         attn = torch.softmax(scores, dim=-1) # nn.Softmax(dim=-1)(scores)
 
