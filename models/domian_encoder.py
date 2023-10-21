@@ -147,3 +147,4 @@ class PromptAwareEncoder(nn.Module):
     ):
 
         return self.encoder(x,o,cross_mask)
+

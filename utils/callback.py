@@ -9,33 +9,27 @@ import copy
 
 
 class EarlyStopping:
-    def __init__(self, early_stopping_metric,patience=7, verbose=False,max_minze=True, delta=0):
+    def __init__(self, patience=7, verbose=False,max_minze=True, delta=0):
         self._patience = patience
         self._verbose = verbose
         self._counter = 0
-        self._best_score = None
         self._early_stop = False
+        self._improved = None
         self._MAXIMIZE = max_minze
+        self._mode = 1 if self._MAXIMIZE else -1
+        self._best_score = self._mode*np.inf
         self._delta = delta
-        self.early_stopping_metric = early_stopping_metric
 
-    def __call__(self, on_stop_sc, model):
-        if self._MAXIMIZE:
-            self.score = on_stop_sc
-        else:
-            self.score = -on_stop_sc
-
-        if self._best_score is None:
+    def __call__(self, score, model):
+        self._improved = False
+        if self._best_score*self._mode <  score*self._mode :
             self._best_score = self.score
-        elif self.score < self._best_score + self._delta:
+            self._improved = True
+        else self.score < self._best_score + self._delta:
             self._counter += 1
-            print(f'EarlyStopping counter: {self._counter} out of {self._patience}')
             if self._counter >= self._patience:
                 self._early_stop = True
-        else:
-            self._best_score = self.score
-            self._best_model = model.state_dict()
-            self._counter = 0
+                print(f'******EarlyStopping: No improved {self._counter} steps out of {self._patience}******')
 
 
 
