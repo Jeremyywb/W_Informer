@@ -11,9 +11,9 @@ class DecoderLayer(nn.Module):
         self.cross_attention = cross_attention
         self.conv1 = nn.Conv1d(in_channels=d_model, out_channels=d_ff, kernel_size=1)
         self.conv2 = nn.Conv1d(in_channels=d_ff, out_channels=d_model, kernel_size=1)
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.norm3 = nn.LayerNorm(d_model)
+        self.norm1LayerNorm = nn.LayerNorm(d_model)
+        self.norm2LayerNorm = nn.LayerNorm(d_model)
+        self.norm3LayerNorm = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
         self.activation = F.relu if activation == "relu" else F.gelu
 
@@ -22,18 +22,18 @@ class DecoderLayer(nn.Module):
             x, x, x,
             attn_mask=x_mask
         )[0])
-        x = self.norm1(x)
+        x = self.norm1LayerNorm(x)
 
         x = x + self.dropout(self.cross_attention(
             x, cross, cross,
             attn_mask=cross_mask
         )[0])
 
-        y = x = self.norm2(x)
+        y = x = self.norm2LayerNorm(x)
         y = self.dropout(self.activation(self.conv1(y.transpose(-1,1))))
         y = self.dropout(self.conv2(y).transpose(-1,1))
 
-        return self.norm3(x+y)
+        return self.norm3LayerNorm(x+y)
 
 class Decoder(nn.Module):
     def __init__(self, layers, norm_layer=None):
